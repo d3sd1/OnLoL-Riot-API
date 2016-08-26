@@ -57,13 +57,13 @@ Returns league for given teams. They're unlimited but it will be chunked in orde
 Entry parameter is optional. If set, it only returns given users league data. If not exists, will thrown an error (NOT_FOUND).
 Counts as rate limit.
 
-### $api-> challengerLeague(queue,region)
+### $api-> challengerLeague(region,queue)
 Returns challenger lader for given queue. 
 Valid queues are **RANKED_SOLO_5x5**, **RANKED_TEAM_5x5**, **RANKED_TEAM_3x3**.
 Default is **RANKED_SOLO_5x5**. If not exists, will thrown an error (NOT_FOUND).
 Counts as rate limit.
 
-### $api-> masterLeague(queue,region)
+### $api-> masterLeague(region,queue)
 Returns challenger lader for given queue. 
 Valid queues are **RANKED_SOLO_5x5**, **RANKED_TEAM_5x5**, **RANKED_TEAM_3x3**.
 Default is **RANKED_SOLO_5x5**. If not exists, will thrown an error (NOT_FOUND).
