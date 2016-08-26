@@ -143,7 +143,7 @@ class riotapi {
 			curl_close($ch);
 			if($resultCode == 429) {
 				$time_header = get_headers($url,1);
-				($time_header) ? $time_needed = (int) $time_header['Retry-After']:$time_needed = 'NOT_SET';
+				($time_header) ? $time_needed = (int) @$time_header['Retry-After']:$time_needed = 'NOT_SET';
 				if(is_int($time_needed))
 				{
 					sleep($time_needed); //Sleep needed time and then reload function
@@ -159,7 +159,7 @@ class riotapi {
 				if($this->cache !== null){
 					if(stristr($url,'%2c')) //Fix for multi query searchs
 					{
-						$baseUrl = explode('%2c',$url);
+						$baseUrl = explode('%2c',strtolower($url));
 						$singleBaseUrl = null;
 						
 						$singleEndUrlData = explode('?',array_pop($baseUrl));
@@ -179,6 +179,10 @@ class riotapi {
 								$strSingle = $strData;
 							}
 							$finalDataSerialized = str_replace(' ', null,strtolower(rawurldecode($strSingle)));
+							if(stristr($finalDataSerialized,','))
+							{
+								
+							}
 							$finalDataResult = array($finalDataSerialized => $baseData[$finalDataSerialized]);
 							$this->cache->put($singleBaseUrl . $strSingle . $singleEndUrl, $finalDataResult, CACHE_LIFETIME_SECONDS);
 						}
@@ -257,7 +261,7 @@ class riotapi {
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
-					$call .= implode(",", $summonersChunked);
+					$call .= rawurlencode(implode(",", $summonersChunked));
 					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
 					$return .= $this->request($call,$region);
 				}
@@ -265,7 +269,7 @@ class riotapi {
 			}
 			else
 			{
-				$call .= implode(",", $summonerId);
+				$call .= rawurlencode(implode(",", $summonerId));
 				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
 				return $this->request($call,$region);
 			}
@@ -289,23 +293,23 @@ class riotapi {
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
-					$call .= implode(",", $summonersChunked);
-					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
+					$call .= rawurlencode(implode(",", $summonersChunked));
+					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
 					$return .= $this->request($call,$region);
 				}
 				return $return . $entry;
 			}
 			else
 			{
-				$call .= implode(",", $teamId);
-				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
+				$call .= rawurlencode(implode(",", $teamId));
+				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
 				return $this->request($call,$region) . $entry;
 			}
 		}
 		else {
 			$call .= $teamId;
-			$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
-			return $this->request($call,$region) . $entry;
+			$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
+			return $this->request($call,$region);
 		}
 	}
 	
@@ -338,14 +342,36 @@ class riotapi {
 	summoner-spell -> Full game summoner spells data
 	summoner-spell/$id -> Full data for given summoner spell
 	versions -> Full LoL Api versions */
-	public function staticData($call, $region='euw', $id=null) {
+	public function staticData($call, $locale = 'en_US', $version = null, $region='euw', $id=null) {
+		$basecall = $call;
 		$call = self::API_URL_STATIC . $call . "/" . $id;
+		$call .= '?locale='.$locale;
+		($version != null) ? $call .= '&version='.$version:null;
+		switch($basecall)
+		{
+			case 'champion':
+			$call .= '&champData=all';
+			break;
+			case 'item':
+			$call .= '&itemData=all';
+			break;
+			case 'mastery':
+			$call .= '&masteryData=all';
+			break;
+			case 'rune':
+			$call .= '&runeData=all';
+			break;
+			case 'summoner-spell':
+			$call .= '&spellData=all';
+			break;
+		}
 		return $this->request($call, $region, (strpos($call,'?') !== false), true);
 	}
 	
 	/* League of legends game status. You can set a region for retrieve only shards for it. Regions avaliable -> https://developer.riotgames.com/docs/regional-endpoints */
 	public function shards($region=null) {
-		$call = self::API_URL_SHARDS . "/" . $region;
+		($region != null) ? $region='/'.$region:null;
+		$call = self::API_URL_SHARDS . $region;
 		return $this->request($call);
 	}
 
@@ -374,14 +400,14 @@ class riotapi {
 	public function summonerByName($summonerName,$region){
 		$call = 'summoner/by-name/';
 		$leagueVersion = '1.4';
-		if (is_array($summonerName)) {
+		if (is_array($summonerName) && count($summonerName) > 1) {
 			if(count($summonerName) > self::API_LIMIT_SUMMONERS)
 			{
 				$summonerNames = array_chunk($summonerName,self::API_LIMIT_SUMMONERS,true);
 				$return = null;
 				foreach($summonerNames as $summonersChunked)
 				{
-					$call .= implode(",",  strtolower(rawurlencode($summonersChunked)));
+					$call .= strtolower(rawurlencode(implode(",",  $summonersChunked)));
 					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
 					$return .= $this->request($call,$region);
 				}
@@ -405,14 +431,14 @@ class riotapi {
 	public function summonerById($summonerId,$region,$option=null){
 		$call = 'summoner/';
 		$leagueVersion = '1.4';
-		if (is_array($summonerId)) {
+		if (is_array($summonerId) && count($summonerId) > 1) {
 			if(count($summonerId) > self::API_LIMIT_SUMMONERS)
 			{
 				$summonerIds = array_chunk($summonerId,self::API_LIMIT_SUMMONERS,true);
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
-					$call .= implode(",", $summonersChunked);
+					$call .= rawurlencode(implode(",", $summonersChunked));
 					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
 					$return .= $this->request($call,$region);
 				}
@@ -420,7 +446,7 @@ class riotapi {
 			}
 			else
 			{
-				$call .= implode(",", $summonerId);
+				$call .= rawurlencode(implode(",", $summonerId));
 				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
 				return $this->request($call,$region);
 			}
@@ -456,7 +482,7 @@ class riotapi {
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
-					$call .= implode(",", $summonersChunked);
+					$call .= rawurlencode(implode(",", $summonersChunked));
 					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
 					$return .= $this->request($call,$region);
 				}
@@ -464,7 +490,7 @@ class riotapi {
 			}
 			else
 			{
-				$call .= implode(",", $summonerId);
+				$call .= rawurlencode(implode(",", $summonerId));
 				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
 				return $this->request($call,$region);
 			}
@@ -476,7 +502,7 @@ class riotapi {
 		}
 	}
 	
-	/* Gets the teams of a summoner, given summoner id. It can be multiple ids. */
+	/* Gets the teams of a summoner, given team id. It can be multiple ids. */
 	public function teamsData($teamId,$region){
 		$call = 'team/';
 		$leagueVersion = '2.4';
@@ -487,7 +513,7 @@ class riotapi {
 				$return = null;
 				foreach($teamIds as $teamsChunked)
 				{
-					$call .= implode(",", $teamsChunked);
+					$call .= rawurlencode(implode(",", $teamsChunked));
 					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
 					$return .= $this->request($call,$region);
 				}
@@ -495,7 +521,7 @@ class riotapi {
 			}
 			else
 			{
-				$call .= implode(",", $teamId);
+				$call .= rawurlencode(implode(",", $teamId));
 				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
 				return $this->request($call,$region);
 			}
