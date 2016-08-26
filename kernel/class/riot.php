@@ -139,7 +139,7 @@ class riotapi {
 		
 			$result = curl_exec($ch);
 			$resultCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
+		
 			curl_close($ch);
 			if($resultCode == 429) {
 				$time_header = get_headers($url,1);
@@ -204,29 +204,31 @@ class riotapi {
 	}
 	
 	/* Champion Data: Null returns all champ data. If ID has been set, it return only champ data */
-	public function champion($id = null){
+	public function champion($id = null,$region='euw'){
 		$call = 'champion';
 		($id != null) ? $call .= '/'.$id:null;
 		$call = str_replace('{version}','1.2',self::API_URL) . $call;
-		return $this->request($call);
+		return $this->request($call,$region);
 	}
 	/* Returns Free To Play champions */
-	public function championFreeToPlay(){
+	public function championFreeToPlay($region='euw'){
 		$call = 'champion?freeToPlay=true';
 		$call = str_replace('{version}','1.2',self::API_URL) . $call;
-		return $this->request($call);
+		return $this->request($call,$region,true);
 	}
 	
 	/* Returns Champion Mastery for given user ID. */
 	public function championMastery($summonerId,$region){
+		global $servers;
 		$call = $summonerId.'/champions';
 		$call = str_replace('{platform}',$servers[$region],self::API_URL_MASTERY) . $call;
 		return $this->request($call,$region);
 	}
 
 	/* Returns Current Match info for given user ID. */
-	public function currentGame($id,$region){
-		$call = self::API_URL_CURRENT_GAME . strtoupper($servers[$region]) . '/' . $id;
+	public function currentGame($summonerId,$region){
+		global $servers;
+		$call = self::API_URL_CURRENT_GAME . strtoupper($servers[$region]) . '/' . $summonerId;
 		return $this->request($call,$region);
 	}
 	
@@ -256,22 +258,22 @@ class riotapi {
 				foreach($summonerIds as $summonersChunked)
 				{
 					$call .= implode(",", $summonersChunked);
-					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
+					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
 					$return .= $this->request($call,$region);
 				}
-				return $return . $entry;
+				return $return;
 			}
 			else
 			{
 				$call .= implode(",", $summonerId);
-				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
-				return $this->request($call,$region) . $entry;
+				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
+				return $this->request($call,$region);
 			}
 		}
 		else {
 			$call .= $summonerId;
-			$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
-			return $this->request($call,$region) . $entry;
+			$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $entry;
+			return $this->request($call,$region);
 		}
 	}
 	
@@ -308,16 +310,16 @@ class riotapi {
 	}
 	
 	/* Returns challenger lader, valid queues are: RANKED_SOLO_5x5, RANKED_TEAM_5x5, RANKED_TEAM_3x3 */
-	public function challengerLeague($queue = 'RANKED_SOLO_5x5') {
+	public function challengerLeague($region,$queue = 'RANKED_SOLO_5x5') {
 		$call = 'league/challenger?type='.$queue;
 		$call = str_replace('{version}','2.5',self::API_URL) . $call;
-		return $this->request($call, true);
+		return $this->request($call, $region, true);
 	}
 	/* Returns master lader, valid queues are: RANKED_SOLO_5x5, RANKED_TEAM_5x5, RANKED_TEAM_3x3 */
-	public function masterLeague($queue = 'RANKED_SOLO_5x5') {
-		$call = 'league/challenger?type='.$queue;
+	public function masterLeague($region,$queue = 'RANKED_SOLO_5x5') {
+		$call = 'league/master?type='.$queue;
 		$call = str_replace('{version}','2.5',self::API_URL) . $call;
-		return $this->request($call, true);
+		return $this->request($call, $region, true);
 	}
 	
 	/* Static data loader. It's not counted on rate limit. $id is an optional value, just set if needed. Given Static data options (for $call) are [$call -> explain]:
@@ -336,9 +338,9 @@ class riotapi {
 	summoner-spell -> Full game summoner spells data
 	summoner-spell/$id -> Full data for given summoner spell
 	versions -> Full LoL Api versions */
-	public function staticData($call, $id=null) {
+	public function staticData($call, $region='euw', $id=null) {
 		$call = self::API_URL_STATIC . $call . "/" . $id;
-		return $this->request($call, (strpos($call,'?') !== false), true);
+		return $this->request($call, $region, (strpos($call,'?') !== false), true);
 	}
 	
 	/* League of legends game status. You can set a region for retrieve only shards for it. Regions avaliable -> https://developer.riotgames.com/docs/regional-endpoints */
@@ -348,22 +350,23 @@ class riotapi {
 	}
 
 	/* Returns details for given match id. TimeLine can be requested. If timeline data is requested, but doesn't exist, then the response won't include it. */
-	public function match($matchId, $timeLine=false) {
+	public function match($matchId, $region, $timeLine=false) {
 		$call = str_replace('{version}','2.2',self::API_URL)  . 'match/' . $matchId . ($timeLine ? '?includeTimeline=true' : '');
-		return $this->request($call, $timeLine);
+		return $this->request($call, $region, $timeLine);
 	}
 
 	/* Returns all ranked games played (since S3) given summoner id. */
-	public function matchHistory($summonerId) {
+	public function matchHistory($summonerId,$region) {
 		$call = str_replace('{version}','2.2',self::API_URL) . 'matchlist/by-summoner/' . $summonerId;
-		return $this->request($call);
+		return $this->request($call,$region);
 	}
 	
 	/* Returns a summoner's stats given summoner id. $option can be summary/ranked. */
-	public function stats($summonerId,$option='summary'){
-		$call = 'stats/by-summoner/' . $summonerId . '/' . $option;
+	public function stats($summonerId,$region,$option='summary',$season=null){
+		($season != null) ? $season='?season='.$season:null;
+		$call = 'stats/by-summoner/' . $summonerId . '/' . $option.$season;
 		$call = str_replace('{version}','1.3',self::API_URL) . $call;
-		return $this->request($call);
+		return $this->request($call,$region);
 	}
 
 
@@ -374,7 +377,7 @@ class riotapi {
 		if (is_array($summonerName)) {
 			if(count($summonerName) > self::API_LIMIT_SUMMONERS)
 			{
-				$summonerNames = array_chunk($summonerName,self::API_LIMIT_LEAGUES,true);
+				$summonerNames = array_chunk($summonerName,self::API_LIMIT_SUMMONERS,true);
 				$return = null;
 				foreach($summonerNames as $summonersChunked)
 				{
@@ -405,7 +408,7 @@ class riotapi {
 		if (is_array($summonerId)) {
 			if(count($summonerId) > self::API_LIMIT_SUMMONERS)
 			{
-				$summonerIds = array_chunk($summonerId,self::API_LIMIT_LEAGUES,true);
+				$summonerIds = array_chunk($summonerId,self::API_LIMIT_SUMMONERS,true);
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
@@ -443,7 +446,7 @@ class riotapi {
 	}
 
 	/* Gets the teams of a summoner, given summoner id. It can be multiple ids. */
-	public function teamsBySummoner($summonerId){
+	public function teamsBySummoner($summonerId,$region){
 		$call = 'team/by-summoner/';
 		$leagueVersion = '2.4';
 		if (is_array($summonerId)) {
@@ -474,7 +477,7 @@ class riotapi {
 	}
 	
 	/* Gets the teams of a summoner, given summoner id. It can be multiple ids. */
-	public function teamsData($teamId){
+	public function teamsData($teamId,$region){
 		$call = 'team/';
 		$leagueVersion = '2.4';
 		if (is_array($teamId)) {
