@@ -27,8 +27,8 @@ Counts as rate limit.
 Returns selected champion data. 
 Counts as rate limit.
 
-### $api-> championFreeToPlay()
-Returns free to play champions. 
+### $api-> championFreeToPlay(region=euw)
+Returns free to play champions. You can set region if you want to see a specific region free to play champs.
 Counts as rate limit.
 
 ### $api-> championMastery(summonerId,region)
