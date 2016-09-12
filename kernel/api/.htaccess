@@ -1,0 +1,5 @@
+Options -Indexes
+RewriteEngine On
+#Protect JSON files
+RewriteCond %{REQUEST_URI} ^.*/database/.*$
+Deny from all

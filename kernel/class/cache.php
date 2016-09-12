@@ -3,66 +3,28 @@ define('JSON_STORE_SECRET_KEY', $config['riot.api.cache.key']);
 define('JSON_STORE_SECRET_KEY2', $config['riot.api.cache.key2']);
 interface CacheInterface {
 
-	/**
-	 * @param string $key Checks whether or not the cache contains unexpired data for the specified key
-	 * @return bool
-	 */
-	public function has($key);
+	public function has($dbPath, $dbFile);
 
-	/**
-	 * @param string $key Gets data for specified key
-	 * @return string|null Returns null if the cached item doesn't exist or has expired
-	 */
-	public function get($key);
+	public function get($dbPath, $dbFile);
 
-	/**
-	 * @param string $key
-	 * @param $data
-	 * @param int $ttl Time in seconds before the data becomes expired
-	 * @return mixed
-	 */
-	public function put($key, $data, $ttl = 0);
+	public function put($dbPath, $dbFile, $data, $ttl = 0);
 
 }
 
 class FileSystemCache implements CacheInterface {
-
-	/**
-	 * @var string
-	 */
-	private $directory;
-
-	/**
-	 * @param string $directory Caching directory
-	 */
-	public function __construct($directory)
+	
+	public function has($dbPath, $dbFile)
 	{
-		$this->directory = trim($directory, '/\\') . '/';
-
-		if ( ! file_exists($this->directory))
-			mkdir($this->directory, 0777, true);
-	}
-
-	/**
-	 * @param string $key Check if the cache contains data for the specified key
-	 * @return bool
-	 */
-	public function has($key)
-	{
-		if ( ! file_exists($this->getPath($key)))
+		if ( ! file_exists($this->getPath($dbPath, $dbFile)))
 			return false;
 
-		$entry = $this->load($key);
+		$entry = $this->load($dbPath, $dbFile);
 		return !$this->expired($entry);
 	}
 
-	/**
-	 * @param string $key Gets data for specified key
-	 * @return string|null
-	 */
-	public function get($key)
+	public function get($dbPath, $dbFile)
 	{
-		$entry = $this->load($key);
+		$entry = $this->load($dbPath, $dbFile);
 
 		$data = null;
 
@@ -71,24 +33,18 @@ class FileSystemCache implements CacheInterface {
 
 		return $data;
 	}
-
-	/**
-	 * @param string $key
-	 * @param $data
-	 * @param int $ttl Time for the data to live inside the cache
-	 * @return mixed
-	 */
-	public function put($key, $data, $ttl = 0)
+	
+	public function put($dbPath, $dbFile, $data, $ttl = 0)
 	{
-		$this->store($key, $data, $ttl, time());
+		$this->store($dbPath, $dbFile, $data, $ttl, time());
 	}
 
-	private function load($key)
+	private function load($dbPath, $dbFile)
 	{
-		return json_decode(file_get_contents($this->getPath($key)),true);
+		return json_decode(file_get_contents($this->getPath($dbPath, $dbFile)),true);
 	}
 
-	private function store($key, $data, $ttl, $createdAt)
+	private function store($dbPath, $dbFile, $data, $ttl, $createdAt)
 	{
 		$entry = array(
 			'createdAt' => $createdAt,
@@ -96,12 +52,14 @@ class FileSystemCache implements CacheInterface {
 			'data' => $data
 		);
 
-		file_put_contents($this->getPath($key), json_encode($entry));
+		file_put_contents($this->getPath($dbPath, $dbFile), json_encode($entry));
 	}
 
-	private function getPath($key)
+	public function getPath($dbPath, $dbFile)
 	{
-		return $this->directory . $this->hash($key);
+		if ( ! file_exists(WEB_BASEDIR . '/' . DATABASE_PATH .'/' . $dbPath))
+			mkdir(WEB_BASEDIR . '/' . DATABASE_PATH . '/' . $dbPath, 0777, true);
+		return WEB_BASEDIR . '/' . DATABASE_PATH . '/' . $dbPath . '/' . $this->hash($dbFile) . '.json';
 	}
 
 	private function expired($entry)
@@ -109,9 +67,9 @@ class FileSystemCache implements CacheInterface {
 		return $entry === null || time() >= ($entry['createdAt'] + $entry['ttl']);
 	}
 
-	private function hash($key)
+	private function hash($hash)
 	{
-		return md5(JSON_STORE_SECRET_KEY.$key.JSON_STORE_SECRET_KEY2);
+		return md5(JSON_STORE_SECRET_KEY.$hash.JSON_STORE_SECRET_KEY2);
 	}
 
 }
