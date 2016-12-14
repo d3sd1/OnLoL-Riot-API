@@ -1,10 +1,39 @@
 <?php
 $core = new base;
-define('URL',$config['web.url']);
+define('URL',sprintf("%s://%s%s",isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off' ? 'https' : 'http',isset($_SERVER['SERVER_NAME']) ? $_SERVER['SERVER_NAME']:null,isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI']:null));
+define('WEB_BASEDIR',__DIR__.'/../../');
+
 class base{
+	public static function addToDebugLog($log,$allowStatus = 'ALLOWED')
+	{
+		if(!is_dir(WEB_BASEDIR.'kernel/logs/'))
+		{
+			mkdir(WEB_BASEDIR.'kernel/logs/');
+		}
+		file_put_contents(WEB_BASEDIR.'kernel/logs/'.date('j_n_Y').'.log', '['.$allowStatus.']'.'['.date('H:i:s e').'] '.$log.PHP_EOL.PHP_EOL, FILE_APPEND);
+	}
 	public function time()
 	{
 		return round(microtime(true) * 1000);
+	}
+	public function crypt($action, $string) {
+		$output = false;
+
+		$encrypt_method = "AES-256-CBC";
+		$secret_key = $GLOBALS['config']['hash.secretKey'];
+		$secret_iv = $GLOBALS['config']['hash.secretKey2'];
+		$key = hash('sha256', $secret_key);
+		$iv = substr(hash('sha256', $secret_iv), 0, 16);
+
+		if( $action == 'encrypt' ) {
+			$output = openssl_encrypt($string, $encrypt_method, $key, 0, $iv);
+			$output = base64_encode($output);
+		}
+		else if( $action == 'decrypt' ){
+			$output = openssl_decrypt(base64_decode($string), $encrypt_method, $key, 0, $iv);
+		}
+
+		return $output;
 	}
 	public function regionDepure($region)
 	{

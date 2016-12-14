@@ -1,14 +1,6 @@
 <?php
 require('cache.php');
-$api = new riotapi(new FileSystemCache('kernel/cache'),$config['riot.api.key.type']);
-define('API_KEY',$config['riot.api.key']);
-define('CACHE_LIFETIME_SECONDS',$config['riot.api.cachetime.default']);
-define('DATABASE_PATH',$config['database.path']);
-define('WEB_BASEDIR',$config['web.basedir']);
-define('ACTUAL_SEASON',current(explode(',',$config['api.seasons'])));
-$actualVersion = explode('.',$api->staticData('versions')[0]);
-define('LOL_PATCH',$actualVersion[0].'.'.$actualVersion[1]);
-define('LOL_PATCH_FUL',$api->staticData('versions')[0]);
+$api = new riotapi(new FileSystemCache(),$config['riot.api.key.type']);
 $servers = array('br' => 'br1', 'eune' => 'eun1', 'euw' => 'euw1', 'kr' => 'kr', 'lan' => 'la1', 'las' => 'la2', 'na' => 'na1', 'oce' => 'oc1', 'tr' => 'tr1', 'ru' => 'ru','jp' => 'jp1'); //Region => Platform ID,  'PBE' => 'PBE1' DISABLED
 class riotapi {
 	
@@ -22,26 +14,23 @@ class riotapi {
 	const API_LIMIT_SUMMONERS = 40; //Max summoners search per query
 	const API_LIMIT_TEAMS = 10; //Max teams search per query
 	const API_RECENTGAMES_LIMIT = 10; //Matchs retrieved by this function
-	private $FORCE_UPDATE = false; //Force update default value. Recommended is false
 
 	private $LONG_LIMIT_INTERVAL;	
+	private $ACTUAL_SEASON;	
+	private $FORCE_UPDATE = false; //Force update default value. Recommended is false
+	private $API_KEY;
 	private $RATE_LIMIT_LONG;	
 	private $SHORT_LIMIT_INTERVAL;	
 	private $RATE_LIMIT_SHORT;	
 	private $cache;
 
-
-	private static $errorCodes = array(0   => 'NO_RESPONSE',
-									   400 => 'BAD_REQUEST',
-									   401 => 'UNAUTHORIZED',
-									   403 => 'ACCESS_DENIED',
-									   404 => 'NOT_FOUND',
-									   429 => 'RATE_LIMIT_EXCEEDED',
-									   500 => 'SERVER_ERROR',
-									   503 => 'UNAVAILABLE');
+	private static $errorCodes = array(0 => 'NO_RESPONSE',400 => 'BAD_REQUEST',401 => 'UNAUTHORIZED',403 => 'ACCESS_DENIED',404 => 'NOT_FOUND',429 => 'RATE_LIMIT_EXCEEDED',500 => 'SERVER_ERROR',503 => 'UNAVAILABLE');
 
 	public function __construct(CacheInterface $cache = null,$API_KEY_TYPE = 'DEV')
 	{
+		$this->API_KEY = $GLOBALS['config']['riot.api.key'];
+		$this->ACTUAL_SEASON = explode(',',$GLOBALS['config']['riot.api.seasons'])[0];
+		$this->CACHE_DEFAULT_INTERVAL = $GLOBALS['config']['riot.api.cache.interval.default'];
 		if($API_KEY_TYPE == 'DEV')
 		{
 			$this->LONG_LIMIT_INTERVAL = 600;
@@ -94,8 +83,12 @@ class riotapi {
 	}
 	
 	/* Internal Function */
-	private function request($call, $dbPath, $dbFile, $dbTime = CACHE_LIFETIME_SECONDS, $region = null, $otherQueries = false, $static = false) {
-		$url = str_replace('{region}', $region, $call) . ($otherQueries ? '&' : '?') . 'api_key=' . API_KEY;
+	private function request($call, $dbPath, $dbFile, $dbTime = 'NOT_SET', $region = null, $otherQueries = false, $static = false) {
+		if($dbTime == 'NOT_SET')
+		{
+			$dbTime = $this->CACHE_DEFAULT_INTERVAL;
+		}
+		$url = str_replace('{region}', $region, $call) . ($otherQueries ? '&' : '?') . 'api_key=' . $this->API_KEY;
 		$result = array();
 		if($this->cache !== null){
 			if(stristr($url,'%2c')) //Fix for multi query searchs
@@ -109,6 +102,10 @@ class riotapi {
 				if(strstr(end($baseUrl),'/'))
 				{
 					$baseUrl = str_replace('/'.explode('/',end($baseUrl))[1],null,$baseUrl); // Fix for /query urls
+				}
+				if($GLOBALS['config']['logs.enabled'])
+				{
+					base::addToDebugLog('Called MULTI-function '.debug_backtrace()[1]['function'].'(MULTI_VALUE)'.PHP_EOL.$url,'CACHE - ALLOWED');
 				}
 				foreach($baseUrl as $strNum => $strData)
 				{
@@ -124,9 +121,9 @@ class riotapi {
 					}
 					$finalDataSerialized = str_replace(' ', null,strtolower(rawurldecode($strSingle)));
 					$dbFileResult = str_replace('{strSingle}',$finalDataSerialized,$dbFile);
-					if($this->cache->has($dbPath, $dbFileResult))
+					if($this->cache->has($dbPath, $dbFileResult, $dbTime))
 					{
-						$result[$finalDataSerialized] = $this->cache->get($dbPath, $dbFileResult)[$finalDataSerialized];
+						$result[$finalDataSerialized] = $this->cache->get($dbPath, $dbFileResult, $dbTime)[$finalDataSerialized];
 					}
 					else
 					{
@@ -136,10 +133,14 @@ class riotapi {
 			}
 			else
 			{
-				if($this->cache->has($dbPath, $dbFile))
+				if($this->cache->has($dbPath, $dbFile, $dbTime))
 				{
-					$resultData = $this->cache->get($dbPath, $dbFile);
+					$resultData = $this->cache->get($dbPath, $dbFile, $dbTime);
 					
+					if($GLOBALS['config']['logs.enabled'])
+					{
+						base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'CACHE - ALLOWED');
+					}
 					if(is_array($resultData))
 					{
 						$result = $resultData;
@@ -160,7 +161,6 @@ class riotapi {
 			$updateNeeded = true;
 		}
 		if(!empty($updateNeeded)) {
-			
 			if ($static == true) {
 				$this->updateLimitQueue($this->longLimitQueue, $this->LONG_LIMIT_INTERVAL, $this->RATE_LIMIT_LONG);
 				$this->updateLimitQueue($this->shortLimitQueue, $this->SHORT_LIMIT_INTERVAL, $this->RATE_LIMIT_SHORT);
@@ -176,6 +176,10 @@ class riotapi {
 		
 			curl_close($ch);
 			if($resultCode == 429) {
+				if($GLOBALS['config']['logs.enabled'])
+				{
+					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'API - DENIED (RATE_LIMIT)');
+				}
 				$time_header = get_headers($url,1);
 				($time_header) ? $time_needed = (int) @$time_header['Retry-After']:$time_needed = 'NOT_SET';
 				if(is_int($time_needed))
@@ -189,6 +193,10 @@ class riotapi {
 				}
 			}
 			if($resultCode == 404) {
+				if($GLOBALS['config']['logs.enabled'])
+				{
+					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'API - ALLOWED_ERROR (NOT_FOUND)');
+				}
 				$jsonFile = $this->cache->getPath($dbPath, $dbFile);
 				if(file_exists($jsonFile))
 				{
@@ -197,10 +205,18 @@ class riotapi {
 			}
 			
 			if($resultCode == 0) {
+				if($GLOBALS['config']['logs.enabled'])
+				{
+					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'API - NO_RESPONSE');
+				}
 				$this->request($call, $dbPath, $dbFile, $dbTime, $region, $otherQueries, $static);
 			}
 			
 			if($resultCode == 200) {
+				if($GLOBALS['config']['logs.enabled'])
+				{
+					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'API - ALLOWED');
+				}
 				if($this->cache !== null){
 					if(stristr($url,'%2c')) //Fix for multi query searchs
 					{
@@ -253,7 +269,19 @@ class riotapi {
 		}
 		return $result;
 	}
-	
+	/* Actual patch: Returns actual patch or actual patch with dev patchs */
+	public function actualPatch($devpatchs = false)
+	{
+		$actualVersion = explode('.',$this->staticData('versions')[0]);
+		if($devpatchs == false)
+		{
+			return $actualVersion[0].'.'.$actualVersion[1];
+		}
+		else
+		{
+			return $this->staticData('versions')[0];
+		}
+	}
 	/* Champion Data: Null returns all champ data. If ID has been set, it return only champ data */
 	public function champion($id = null,$region='euw'){
 		if($id == null)
@@ -299,7 +327,7 @@ class riotapi {
 		global $config;
 		$dbPath = 'summoner/livegame';
 		$dbFile = $summonerId.'_'.$region; 
-		$dbTime = $config['api.ongamecheck.interval'];
+		$dbTime = 50;
 		$call = self::API_URL_CURRENT_GAME . strtoupper($servers[$region]) . '/' . $summonerId;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 	}
@@ -495,7 +523,16 @@ class riotapi {
 	}
 	
 	/* Returns a summoner's stats given summoner id. $option can be summary/ranked. */
-	public function stats($summonerId,$region,$option='summary',$season=ACTUAL_SEASON){
+	public function stats($summonerId,$region,$option='summary',$season='NOT_SET'){
+		if($season == 'NOT_SET')
+		{
+			$season = $this->ACTUAL_SEASON;
+		}
+		$fixForSeasonNames = str_ireplace('SEASON',null,$season);
+		if(strlen($fixForSeasonNames) == 1)
+		{
+			$season = 'SEASON201'.$fixForSeasonNames;
+		}
 		$dbPath = 'summoner/stats/'.$option;
 		$dbFile = $summonerId.'_'.$region.'_'.strtoupper($season); 
 		$dbTime = 3600;

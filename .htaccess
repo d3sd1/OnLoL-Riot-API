@@ -1,1 +1,6 @@
 RewriteEngine On
+Options -Indexes
+<FilesMatch ".*\.(conf|json|log)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>

@@ -1,42 +1,56 @@
 <?php
-define('JSON_STORE_SECRET_KEY', $config['riot.api.cache.key']);
-define('JSON_STORE_SECRET_KEY2', $config['riot.api.cache.key2']);
+if(!@$config['hash.secretKey'])
+{
+	$writeKey1 = fopen(WEB_BASEDIR.'/kernel/config.conf', 'a+');
+	fwrite($writeKey1, PHP_EOL.'hash.secretKey='.md5(microtime().rand()).PHP_EOL);
+	fclose($writeKey1);
+	$key1Written = true;
+}
+if(!@$config['hash.secretKey2'])
+{
+	$writeKey2 = fopen(WEB_BASEDIR.'/kernel/config.conf', 'a+');
+	fwrite($writeKey2, (!$key1Written) ? PHP_EOL:null.'hash.secretKey2='.md5(microtime().rand()));
+	fclose($writeKey2);
+}
+$config = parse_ini_file(WEB_BASEDIR.'/kernel/config.conf');
 interface CacheInterface {
-
-	public function has($dbPath, $dbFile);
-
-	public function get($dbPath, $dbFile);
-
-	public function put($dbPath, $dbFile, $data, $ttl = 0);
 
 }
 
 class FileSystemCache implements CacheInterface {
 	
-	public function has($dbPath, $dbFile)
+	public function has($dbPath, $dbFile, $interval = 'NOT_SET')
 	{
+		if($interval == 'NOT_SET')
+		{
+			$interval = $GLOBALS['config']['riot.api.cache.interval.default'];
+		}
 		if ( ! file_exists($this->getPath($dbPath, $dbFile)))
 			return false;
 
 		$entry = $this->load($dbPath, $dbFile);
-		return !$this->expired($entry);
+		return !$this->expired($dbPath, $dbFile, $interval);
 	}
 
-	public function get($dbPath, $dbFile)
+	public function get($dbPath, $dbFile, $interval = 'NOT_SET')
 	{
+		if($interval == 'NOT_SET')
+		{
+			$interval = $GLOBALS['config']['riot.api.cache.interval.default'];
+		}
 		$entry = $this->load($dbPath, $dbFile);
 
-		$data = null;
-
-		if ( ! $this->expired($entry))
-			$data = $entry['data'];
+		if ( ! $this->expired($dbPath, $dbFile, $interval))
+			$data = $entry;
 
 		return $data;
 	}
 	
-	public function put($dbPath, $dbFile, $data, $ttl = 0)
+	public function put($dbPath, $dbFile, $data)
 	{
-		$this->store($dbPath, $dbFile, $data, $ttl, time());
+		$encPath = $this->getPath($dbPath, $dbFile);
+		clearstatcache(true,$encPath);
+		file_put_contents($encPath, json_encode($data));
 	}
 
 	private function load($dbPath, $dbFile)
@@ -44,32 +58,23 @@ class FileSystemCache implements CacheInterface {
 		return json_decode(file_get_contents($this->getPath($dbPath, $dbFile)),true);
 	}
 
-	private function store($dbPath, $dbFile, $data, $ttl, $createdAt)
-	{
-		$entry = array(
-			'createdAt' => $createdAt,
-			'ttl' => $ttl,
-			'data' => $data
-		);
-
-		file_put_contents($this->getPath($dbPath, $dbFile), json_encode($entry));
-	}
-
 	public function getPath($dbPath, $dbFile)
 	{
-		if ( ! file_exists(WEB_BASEDIR . '/' . DATABASE_PATH .'/' . $dbPath))
-			mkdir(WEB_BASEDIR . '/' . DATABASE_PATH . '/' . $dbPath, 0777, true);
-		return WEB_BASEDIR . '/' . DATABASE_PATH . '/' . $dbPath . '/' . $this->hash($dbFile) . '.json';
+		if ( ! file_exists(WEB_BASEDIR . '/'.$GLOBALS['config']['database.dir'].'/' . $dbPath))
+		{
+			mkdir(WEB_BASEDIR . '/'.$GLOBALS['config']['database.dir'].'/' . $dbPath, 0777, true);
+		}
+		return WEB_BASEDIR . '/'.$GLOBALS['config']['database.dir'].'/' . $dbPath . '/' . $this->hash($dbFile) . '.json';
 	}
 
-	private function expired($entry)
+	private function expired($dbPath, $dbFile, $interval)
 	{
-		return $entry === null || time() >= ($entry['createdAt'] + $entry['ttl']);
+		return time() >= (filemtime($this->getPath($dbPath, $dbFile)) + $interval);
 	}
 
 	private function hash($hash)
 	{
-		return md5(JSON_STORE_SECRET_KEY.$hash.JSON_STORE_SECRET_KEY2);
+		return md5($GLOBALS['config']['hash.secretKey'].$hash.$GLOBALS['config']['hash.secretKey2']);
 	}
 
 }

@@ -3,16 +3,33 @@ Riot api base for PHP. Updated constantly and almost without bugs!
 It has no errors on http requests.
 It uses Json as data storage, since it's easier and faster than mysql.
 Data storaged is also encrypted by a private keys for dont let the users get data when not allowed.
+IMPORTANT: TOURNAMENTS ARE NOT ADDED, BECAUSE RIOT DIDN'T LET ME AN API KEY FOR IT. IF YOU CAN CONTRIBUTE AND LET ME AN API KEY FOR IT I'LL WORK ON IT!!
+
+# NEW ON VERSION 1.4!!!
+* Secured database path and files it so hard
+* Auto detect url
+* Auto detect base path
+* Removed mysql connection
+* Auto key-generator if not exists. Else, it can be changed on "kernel/config.conf -> hash.secretKey && hash.secretKey2"
+* Removed access globally to .conf files for all users (not for internal PHP)
+* Improved access security on kernel
+* Added function actualPatch, which returns public actual patch, or dev actual patch. Default is public actual patch.
+* Improved class and added clarity to it
+* Removed unused variables from config
+* Database now uses less disk space
+* Cache now takes shorter time to load data
+* Cleaned cache function
+* Removed path to internal onlol langs
+* Crypt session lang data, and decrypted to a single variable with the internal keys
+* Added log/debug option on config so you can see responses per query and the queries you made, with long descriptions, responses, status, and backtrace.
+* Added a function on stats so you can call season7 and it will get season7 stats (instead of just giving season2017)
+
 # Configuration
 It's easy. Just download it obviously and go to kernel/config.conf. Edit those lanes:
 
 > `riot.api.key=` Riot api key here
 
->`riot.api.cache.key=` Secret hash 1
-
->`riot.api.cache.key2=` Secret hash 2
-
->`web.url=http://localhost` Website url
+>`riot.api.key.type=` Api key type (PROD for production and DEV for development)
 
 Configuration done! You've secured your data!
 
