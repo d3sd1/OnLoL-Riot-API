@@ -1,7 +1,9 @@
 <?php
 require('cache.php');
 $api = new riotapi(new FileSystemCache(),$config['riot.api.key.type']);
+$stats = new stats();
 $servers = array('br' => 'br1', 'eune' => 'eun1', 'euw' => 'euw1', 'kr' => 'kr', 'lan' => 'la1', 'las' => 'la2', 'na' => 'na1', 'oce' => 'oc1', 'tr' => 'tr1', 'ru' => 'ru','jp' => 'jp1'); //Region => Platform ID,  'PBE' => 'PBE1' DISABLED
+
 class riotapi {
 	
 	const API_URL = 'https://{region}.api.pvp.net/api/lol/{region}/v{version}/';
@@ -14,7 +16,7 @@ class riotapi {
 	const API_LIMIT_SUMMONERS = 40; //Max summoners search per query
 	const API_LIMIT_TEAMS = 10; //Max teams search per query
 	const API_RECENTGAMES_LIMIT = 10; //Matchs retrieved by this function
-
+	private $CHAMP_MASTERY_MAX_LEVEL = 7; //Max champion mastery level
 	private $LONG_LIMIT_INTERVAL;	
 	private $ACTUAL_SEASON;	
 	private $FORCE_UPDATE = false; //Force update default value. Recommended is false
@@ -22,15 +24,18 @@ class riotapi {
 	private $RATE_LIMIT_LONG;	
 	private $SHORT_LIMIT_INTERVAL;	
 	private $RATE_LIMIT_SHORT;	
-	private $cache;
+	private $CACHE;
+	private $DEFAULT_REGION;
+	private $ACTUAL_PATCH;
 
 	private static $errorCodes = array(0 => 'NO_RESPONSE',400 => 'BAD_REQUEST',401 => 'UNAUTHORIZED',403 => 'ACCESS_DENIED',404 => 'NOT_FOUND',429 => 'RATE_LIMIT_EXCEEDED',500 => 'SERVER_ERROR',503 => 'UNAVAILABLE');
 
-	public function __construct(CacheInterface $cache = null,$API_KEY_TYPE = 'DEV')
+	public function __construct(CacheInterface $CACHE = null,$API_KEY_TYPE)
 	{
 		$this->API_KEY = $GLOBALS['config']['riot.api.key'];
 		$this->ACTUAL_SEASON = explode(',',$GLOBALS['config']['riot.api.seasons'])[0];
 		$this->CACHE_DEFAULT_INTERVAL = $GLOBALS['config']['riot.api.cache.interval.default'];
+		$this->DEFAULT_REGION = $GLOBALS['config']['default.region'];
 		if($API_KEY_TYPE == 'DEV')
 		{
 			$this->LONG_LIMIT_INTERVAL = 600;
@@ -49,7 +54,9 @@ class riotapi {
 		$this->shortLimitQueue = new SplQueue();
 		$this->longLimitQueue = new SplQueue();
 
-		$this->cache = $cache;
+		$this->cache = $CACHE;
+		$actualVersion = explode('.',$this->staticData('versions', $fulldata = false, $locale = 'en_US', $version = null, $region='NOT_SET', $id=null, $classCall = false)[0]);
+		$this->ACTUAL_PATCH = $actualVersion[0].'.'.$actualVersion[1];
 	}
 	/* Internal Function */
 	public function forceUpdate($status = true){
@@ -84,6 +91,7 @@ class riotapi {
 	
 	/* Internal Function */
 	private function request($call, $dbPath, $dbFile, $dbTime = 'NOT_SET', $region = null, $otherQueries = false, $static = false) {
+	try{
 		if($dbTime == 'NOT_SET')
 		{
 			$dbTime = $this->CACHE_DEFAULT_INTERVAL;
@@ -195,7 +203,7 @@ class riotapi {
 			if($resultCode == 404) {
 				if($GLOBALS['config']['logs.enabled'])
 				{
-					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'API - ALLOWED_ERROR (NOT_FOUND)');
+					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).')'.PHP_EOL.$url,'API - ALLOWED_ERROR (NOT_FOUND)');
 				}
 				$jsonFile = $this->cache->getPath($dbPath, $dbFile);
 				if(file_exists($jsonFile))
@@ -207,7 +215,7 @@ class riotapi {
 			if($resultCode == 0) {
 				if($GLOBALS['config']['logs.enabled'])
 				{
-					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'API - NO_RESPONSE');
+					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).')'.PHP_EOL.$url,'API - NO_RESPONSE');
 				}
 				$this->request($call, $dbPath, $dbFile, $dbTime, $region, $otherQueries, $static);
 			}
@@ -215,7 +223,7 @@ class riotapi {
 			if($resultCode == 200) {
 				if($GLOBALS['config']['logs.enabled'])
 				{
-					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'()'.PHP_EOL.$url,'API - ALLOWED');
+					base::addToDebugLog('Called function '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).')'.PHP_EOL.$url,'API - ALLOWED');
 				}
 				if($this->cache !== null){
 					if(stristr($url,'%2c')) //Fix for multi query searchs
@@ -267,23 +275,83 @@ class riotapi {
 				$result = json_decode($result,true);
 			}
 		}
+		if($GLOBALS['config']['save.last.query'])
+		{
+			$GLOBALS['core']->saveLastQueryLog('Query function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).')'.PHP_EOL.PHP_EOL.json_encode($result, JSON_FORCE_OBJECT|JSON_PRETTY_PRINT));
+		}
+		if($GLOBALS['config']['save.last.session.queries'])
+		{
+			$GLOBALS['core']->saveLastSessionQueries('Query function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).')'.PHP_EOL.PHP_EOL.json_encode($result, JSON_FORCE_OBJECT|JSON_PRETTY_PRINT),debug_backtrace()[1]['function']);
+		}
 		return $result;
+	} catch (Exception $e) {
+		if($GLOBALS['config']['save.errors.to.log'])
+		{
+			$GLOBALS['core']->saveToErrorLog('ERROR -> Function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).'), Message: '.$e->getMessage().PHP_EOL.$url);
+		}
+		if($GLOBALS['config']['show.errors.on.exec'])
+		{
+			die('ERROR -> Function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).'), Message: '.$e->getMessage().PHP_EOL.$url);
+		}
+    }
 	}
 	/* Actual patch: Returns actual patch or actual patch with dev patchs */
 	public function actualPatch($devpatchs = false)
 	{
 		$actualVersion = explode('.',$this->staticData('versions')[0]);
+		if($GLOBALS['config']['stats.generate'])
+		{
+			if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches.json'))
+			{
+				$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches.json'),true);
+				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+				{
+					$preContent[$this->ACTUAL_PATCH] = array();
+				}
+				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				if($devpatchs == true)
+				{
+					$preContent[$this->ACTUAL_PATCH]['devCalls']++;
+				}
+				else
+				{
+					$preContent[$this->ACTUAL_PATCH]['verCalls']++;
+				}
+			}
+			else
+			{
+				$preContent = array($this->ACTUAL_PATCH => array('callsThisPatch' => 0, 'devCalls' => 0, 'verCalls' => 0));
+				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				if($devpatchs == true)
+				{
+					$preContent[$this->ACTUAL_PATCH]['devCalls']++;
+				}
+				else
+				{
+					$preContent[$this->ACTUAL_PATCH]['verCalls']++;
+				}
+			}
+			$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches.json','w+');
+				
+			fwrite($saveStat, json_encode($preContent));
+			fclose($saveStat);
+		}
 		if($devpatchs == false)
 		{
 			return $actualVersion[0].'.'.$actualVersion[1];
 		}
 		else
 		{
-			return $this->staticData('versions')[0];
+			$result = $this->staticData('versions')[0];
+			return $result;
 		}
 	}
 	/* Champion Data: Null returns all champ data. If ID has been set, it return only champ data */
-	public function champion($id = null,$region='euw'){
+	public function champion($id = null,$region = 'NOT_SET'){ //It uses same array keys than championFreeToPlay() on stats
+		if($region == 'NOT_SET')
+		{
+			$region = $this->DEFAULT_REGION;
+		}
 		if($id == null)
 		{
 			$dbPath = 'champions';
@@ -294,20 +362,228 @@ class riotapi {
 			$dbPath = 'champions';
 			$dbFile = $id;
 		}
-		$dbTime = 3600;
+		
+		$dbTime = $GLOBALS['config']['cache.champions'];
 		$call = 'champion';
 		($id != null) ? $call .= '/'.$id:null;
 		$call = str_replace('{version}','1.2',self::API_URL) . $call;
-		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		$return = $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		if($GLOBALS['config']['stats.generate'])
+		{
+			if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'))
+			{
+				$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'),true);
+				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+				{
+					$preContent[$this->ACTUAL_PATCH] = array();
+				}
+				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				if($id != null)
+				{
+					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
+					{
+						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
+					}
+					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
+					if($return['rankedPlayEnabled'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
+					}
+					if($return['freeToPlay'] == true)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
+					}
+					if($return['active'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
+					}
+					/* Now do the same but on all patches */
+					if(!array_key_exists($id,$preContent))
+					{
+						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
+					}
+					$preContent[$id]['totalCalls']++;
+					if($return['rankedPlayEnabled'] == false)
+					{
+						$preContent[$id]['lastDisabledTimeRanked'] = time();
+					}
+					if($return['freeToPlay'] == true)
+					{
+						$preContent[$id]['lastFreeToPlayTime'] = time();
+					}
+					if($return['active'] == false)
+					{
+						$preContent[$id]['lastDisabledTime'] = time();
+					}
+				}
+			}
+			else
+			{
+				$preContent = array($this->ACTUAL_PATCH => array('callsThisPatch' => 0));
+				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+				{
+					$preContent[$this->ACTUAL_PATCH] = array();
+				}
+				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				if($id != null)
+				{
+					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
+					{
+						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
+					}
+					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
+					if($return['rankedPlayEnabled'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
+					}
+					if($return['freeToPlay'] == true)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
+					}
+					if($return['active'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
+					}
+					/* Now do the same but on all patches */
+					if(!array_key_exists($id,$preContent))
+					{
+						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
+					}
+					$preContent[$id]['totalCalls']++;
+					if($return['rankedPlayEnabled'] == false)
+					{
+						$preContent[$id]['lastDisabledTimeRanked'] = time();
+					}
+					if($return['freeToPlay'] == true)
+					{
+						$preContent[$id]['lastFreeToPlayTime'] = time();
+					}
+					if($return['active'] == false)
+					{
+						$preContent[$id]['lastDisabledTime'] = time();
+					}
+				}
+			}
+			$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json','w+');
+			fwrite($saveStat, json_encode($preContent));
+			fclose($saveStat);
+		}
+		return $return;
 	}
 	/* Returns Free To Play champions */
-	public function championFreeToPlay($region='euw'){
+	public function championFreeToPlay($region='euw'){ //It uses same array keys than champion() on stats
 		$dbPath = 'champions';
 		$dbFile = 'freetoplay_'.$region;
-		$dbTime = 3600;
+		$dbTime = $GLOBALS['config']['cache.champions'];
 		$call = 'champion?freeToPlay=true';
 		$call = str_replace('{version}','1.2',self::API_URL) . $call;
-		return $this->request($call,$dbPath,$dbFile,$dbTime,$region,true);
+		$return = $this->request($call,$dbPath,$dbFile,$dbTime,$region,true);
+		if($GLOBALS['config']['stats.generate'])
+		{
+		foreach($return['champions'] as $champ)
+		{
+			$id = $champ['id'];
+			if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'))
+			{
+				$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'),true);
+				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+				{
+					$preContent[$this->ACTUAL_PATCH] = array();
+				}
+				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				if($id != null)
+				{
+					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
+					{
+						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
+					}
+					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
+					if($champ['rankedPlayEnabled'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
+					}
+					if($champ['freeToPlay'] == true)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
+					}
+					if($champ['active'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
+					}
+					/* Now do the same but on all patches */
+					if(!array_key_exists($id,$preContent))
+					{
+						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
+					}
+					$preContent[$id]['totalCalls']++;
+					if($champ['rankedPlayEnabled'] == false)
+					{
+						$preContent[$id]['lastDisabledTimeRanked'] = time();
+					}
+					if($champ['freeToPlay'] == true)
+					{
+						$preContent[$id]['lastFreeToPlayTime'] = time();
+					}
+					if($champ['active'] == false)
+					{
+						$preContent[$id]['lastDisabledTime'] = time();
+					}
+				}
+			}
+			else
+			{
+				$preContent = array($this->ACTUAL_PATCH => array('callsThisPatch' => 0));
+				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+				{
+					$preContent[$this->ACTUAL_PATCH] = array();
+				}
+				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				if($id != null)
+				{
+					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
+					{
+						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
+					}
+					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
+					if($champ['rankedPlayEnabled'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
+					}
+					if($champ['freeToPlay'] == true)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
+					}
+					if($champ['active'] == false)
+					{
+						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
+					}
+					/* Now do the same but on all patches */
+					if(!array_key_exists($id,$preContent))
+					{
+						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
+					}
+					$preContent[$id]['totalCalls']++;
+					if($champ['rankedPlayEnabled'] == false)
+					{
+						$preContent[$id]['lastDisabledTimeRanked'] = time();
+					}
+					if($champ['freeToPlay'] == true)
+					{
+						$preContent[$id]['lastFreeToPlayTime'] = time();
+					}
+					if($champ['active'] == false)
+					{
+						$preContent[$id]['lastDisabledTime'] = time();
+					}
+				}
+			}
+			
+			$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json','w+');
+			fwrite($saveStat, json_encode($preContent));
+			fclose($saveStat);
+		  }
+		}
+		return $return;
 	}
 	
 	/* Returns Champion Mastery for given user ID. */
@@ -315,10 +591,90 @@ class riotapi {
 		global $servers;
 		$dbPath = 'summoner/mastery';
 		$dbFile = $summonerId.'_'.$region; 
-		$dbTime = 1800;
+		$dbTime = $GLOBALS['config']['cache.summonerschampmastery'];
 		$call = $summonerId.'/champions';
 		$call = str_replace('{platform}',$servers[$region],self::API_URL_MASTERY) . $call;
-		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		$return = $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		if($GLOBALS['config']['stats.generate'])
+		{
+			/* Summoner max */
+			$summonerLevelsMax = 0;
+			$summonerTotalPoints = 0;
+			$summonerMaxPointsChamp = 0;
+			$summonerMaxPointsChampId = 0;
+			foreach($return as $champ)
+			{
+				if($champ['championLevel'] == $this->CHAMP_MASTERY_MAX_LEVEL)
+				{
+					$summonerLevelsMax++;
+				}
+				if($champ['championPoints'] > $summonerMaxPointsChamp)
+				{
+					$summonerMaxPointsChamp = $champ['championPoints'];
+					$summonerMaxPointsChampId = $champ['championId'];
+				}
+				$summonerTotalPoints += $champ['championPoints'];
+			}
+			/* Summoner champ max and write data */
+			foreach($return as $champ)
+			{
+				if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champMastery.json'))
+				{
+					$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champMastery.json'),true);
+					/* For global data */
+					if($preContent['summonerMaxLevelsMax'] < $summonerLevelsMax)
+					{
+						$preContent['summonerMaxLevelsMax'] = $summonerLevelsMax;
+						$preContent['summonerIdMaxLevelsMax'] = $summonerId;
+					}
+					if($preContent['summonerMaxPoints'] < $summonerTotalPoints)
+					{
+						$preContent['summonerMaxPoints'] = $summonerTotalPoints;
+						$preContent['summonerIdMaxPoints'] = $summonerId;
+					}
+					if($preContent['summonerMaxPointsSingleChamp'] < $summonerMaxPointsChamp)
+					{
+						$preContent['summonerMaxPointsSingleChamp'] = $summonerMaxPointsChamp;
+						$preContent['summonerIdMaxPointsSingleChamp'] = $summonerId;
+						$preContent['summonerMaxPointsSingleChampId'] = $summonerMaxPointsChampId;
+					}
+					/* For this patch */
+					if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+					{
+						$preContent[$this->ACTUAL_PATCH] = array();
+					}
+					if($preContent[$this->ACTUAL_PATCH]['summonerMaxLevelsMax'] < $summonerLevelsMax)
+					{
+						$preContent[$this->ACTUAL_PATCH]['summonerMaxLevelsMax'] = $summonerLevelsMax;
+						$preContent[$this->ACTUAL_PATCH]['summonerIdMaxLevelsMax'] = $summonerId;
+					}
+					if($preContent[$this->ACTUAL_PATCH]['summonerMaxPoints'] < $summonerTotalPoints)
+					{
+						$preContent[$this->ACTUAL_PATCH]['summonerMaxPoints'] = $summonerTotalPoints;
+						$preContent[$this->ACTUAL_PATCH]['summonerIdMaxPoints'] = $summonerId;
+					}
+					if($preContent[$this->ACTUAL_PATCH]['summonerMaxPointsSingleChamp'] < $summonerMaxPointsChamp)
+					{
+						$preContent[$this->ACTUAL_PATCH]['summonerMaxPointsSingleChamp'] = $summonerMaxPointsChamp;
+						$preContent[$this->ACTUAL_PATCH]['summonerIdMaxPointsSingleChamp'] = $summonerId;
+						$preContent[$this->ACTUAL_PATCH]['summonerMaxPointsSingleChampId'] = $summonerMaxPointsChampId;
+					}
+					//$preContent = array('summonerMaxLevelsMax' => $summonerLevelsMax, 'summonerIdMaxLevelsMax' => $summonerId, 'summonerMaxPoints' => $summonerTotalPoints, 'summonerIdMaxPoints' => $summonerId, 'summonerMaxPointsSingleChamp' => $summonerMaxPointsChamp, 'summonerIdMaxPointsSingleChamp' => $summonerId, 'summonerMaxPointsSingleChampId' => $summonerMaxPointsChampId);
+				}
+				else
+				{
+					$preContent = array('summonerMaxLevelsMax' => $summonerLevelsMax, 'summonerIdMaxLevelsMax' => $summonerId, 'summonerMaxPoints' => $summonerTotalPoints, 'summonerIdMaxPoints' => $summonerId, 'summonerMaxPointsSingleChamp' => $summonerMaxPointsChamp, 'summonerIdMaxPointsSingleChamp' => $summonerId, 'summonerMaxPointsSingleChampId' => $summonerMaxPointsChampId);
+					$preContent[$this->ACTUAL_PATCH] = array('summonerMaxLevelsMax' => $summonerLevelsMax, 'summonerIdMaxLevelsMax' => $summonerId, 'summonerMaxPoints' => $summonerTotalPoints, 'summonerIdMaxPoints' => $summonerId, 'summonerMaxPointsSingleChamp' => $summonerMaxPointsChamp, 'summonerIdMaxPointsSingleChamp' => $summonerId, 'summonerMaxPointsSingleChampId' => $summonerMaxPointsChampId);
+				}
+			
+				$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champMastery.json','w+');
+				fwrite($saveStat, json_encode($preContent));
+				fclose($saveStat);
+			}
+		}
+		
+		
+		return $return;
 	}
 
 	/* Returns Current Match info for given user ID. */
@@ -327,7 +683,7 @@ class riotapi {
 		global $config;
 		$dbPath = 'summoner/livegame';
 		$dbFile = $summonerId.'_'.$region; 
-		$dbTime = 50;
+		$dbTime = $GLOBALS['config']['cache.currentgame'];
 		$call = self::API_URL_CURRENT_GAME . strtoupper($servers[$region]) . '/' . $summonerId;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 	}
@@ -336,7 +692,7 @@ class riotapi {
 	public function featuredGames($region = 'euw'){
 		$dbPath = 'featured';
 		$dbFile = $region; 
-		$dbTime = 300;
+		$dbTime = $GLOBALS['config']['cache.featuredgames'];
 		$call = self::API_URL_FEATURED;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 	}
@@ -345,7 +701,7 @@ class riotapi {
 	public function recentGames($summonerId,$region){
 		$dbPath = 'summoner/games/';
 		$dbFile = $summonerId.'_'.$region; 
-		$dbTime = 900;
+		$dbTime = $GLOBALS['config']['cache.recentgames'];
 		$call = 'game/by-summoner/' . $summonerId . '/recent';
 		$call = str_replace('{version}','1.3',self::API_URL). $call;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
@@ -355,7 +711,7 @@ class riotapi {
 	public function league($summonerId, $region, $entry=null){
 		($entry != null) ? $entry = '/entry':$entry=null;
 		$dbPath = 'summoner/league';
-		$dbTime = 1800;
+		$dbTime = $GLOBALS['config']['cache.leagues'];
 		$leagueVersion = '2.5';
 		$call = 'league/by-summoner/';
 		if (is_array($summonerId) && count($summonerId) > 1) {
@@ -393,7 +749,7 @@ class riotapi {
 		($entry != null) ? $entry = '/entry':$entry=null;
 		$dbPath = 'team/league';
 		$dbFile = $teamId.'_'.$region . str_replace('/','_',$entry); 
-		$dbTime = 1800;
+		$dbTime = $GLOBALS['config']['cache.leagues'];
 		$leagueVersion = '2.5';
 		$call = 'league/by-team/';
 		if (is_array($teamId) && count($teamId) > 1) {
@@ -430,7 +786,7 @@ class riotapi {
 	public function challengerLeague($region,$queue = 'RANKED_SOLO_5x5') {
 		$dbPath = 'league';
 		$dbFile = 'challenger_'.$region.'_'.$queue; 
-		$dbTime = 3600;
+		$dbTime = $GLOBALS['config']['cache.ladders'];
 		$call = 'league/challenger?type='.$queue;
 		$call = str_replace('{version}','2.5',self::API_URL) . $call;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region, true);
@@ -440,7 +796,7 @@ class riotapi {
 	public function masterLeague($region,$queue = 'RANKED_SOLO_5x5') {
 		$dbPath = 'league';
 		$dbFile = 'master_'.$region.'_'.$queue; 
-		$dbTime = 3600;
+		$dbTime = $GLOBALS['config']['cache.ladders'];
 		$call = 'league/master?type='.$queue;
 		$call = str_replace('{version}','2.5',self::API_URL) . $call;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region, true);
@@ -462,10 +818,18 @@ class riotapi {
 	summoner-spell -> Full game summoner spells data
 	summoner-spell/$id -> Full data for given summoner spell
 	versions -> Full LoL Api versions */
-	public function staticData($call, $fulldata = false, $locale = 'en_US', $version = null, $region='euw', $id=null) {
+	public function staticData($call, $fulldata = false, $locale = 'en_US', $version = null, $region='NOT_SET', $id=null, $classCall = false) {
+		if($classCall == true)
+		{
+			//stats here
+		}
+		if($region == 'NOT_SET')
+		{
+			$region = $this->DEFAULT_REGION;
+		}
 		$dbPath = 'static/'.$call;
 		$dbFile = ($id != null ? $id.'_' : null).$locale.'_'.($version != null ? $version.'_' : null).$region.'fulldata_'.$fulldata;
-		$dbTime = 86400;
+		$dbTime = $GLOBALS['config']['cache.staticdata'];
 		$basecall = $call;
 		$call = self::API_URL_STATIC . $call . ($id != null ? '/'.$id : null);
 		$call .= '?locale='.$locale;
@@ -499,7 +863,7 @@ class riotapi {
 		($region != null) ? $region='/'.$region:null;
 		$dbPath = 'shards';
 		$dbFile = $region; 
-		$dbTime = 3600;
+		$dbTime = $GLOBALS['config']['cache.shards'];
 		$call = self::API_URL_SHARDS . $region;
 		return $this->request($call,$dbPath,$dbFile,$dbTime);
 	}
@@ -508,7 +872,7 @@ class riotapi {
 	public function match($matchId, $region, $timeLine=false) {
 		$dbPath = 'match';
 		$dbFile = $matchId.'_'.$region.($timeLine ? '_timeline' : null); 
-		$dbTime = 86400;
+		$dbTime = $GLOBALS['config']['cache.matches'];
 		$call = str_replace('{version}','2.2',self::API_URL)  . 'match/' . $matchId . ($timeLine ? '?includeTimeline=true' : '');
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region,$timeLine);
 	}
@@ -517,7 +881,7 @@ class riotapi {
 	public function matchHistory($summonerId,$region) {
 		$dbPath = 'summoner/matchlist';
 		$dbFile = $summonerId.'_'.$region; 
-		$dbTime = 10800;
+		$dbTime = $GLOBALS['config']['cache.matchhistory'];
 		$call = str_replace('{version}','2.2',self::API_URL) . 'matchlist/by-summoner/' . $summonerId;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 	}
@@ -535,7 +899,7 @@ class riotapi {
 		}
 		$dbPath = 'summoner/stats/'.$option;
 		$dbFile = $summonerId.'_'.$region.'_'.strtoupper($season); 
-		$dbTime = 3600;
+		$dbTime = $GLOBALS['config']['cache.stats'];
 		$call = 'stats/by-summoner/' . $summonerId . '/' . $option.'?season='.strtoupper($season);
 		$call = str_replace('{version}','1.3',self::API_URL) . $call;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region,true);
@@ -546,7 +910,7 @@ class riotapi {
 	public function summonerByName($summonerName,$region){
 		$call = 'summoner/by-name/';
 		$dbPath = 'summoner/name';
-		$dbTime = 900;
+		$dbTime = $GLOBALS['config']['cache.summoners'];
 		$leagueVersion = '1.4';
 		if (is_array($summonerName) && count($summonerName) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region;
@@ -583,7 +947,7 @@ class riotapi {
 	/* Returns summoner info given summoner id. You can set multiple summoners. $option can be: masteries,runes,name. */
 	public function summonerById($summonerId,$region,$option=null){
 		$dbPath = 'summoner/id';
-		$dbTime = 900;
+		$dbTime = $GLOBALS['config']['cache.summoners'];
 		$call = 'summoner/';
 		$leagueVersion = '1.4';
 		switch ($option) {
@@ -633,7 +997,7 @@ class riotapi {
 	/* Gets the teams of a summoner, given summoner id. It can be multiple ids. */
 	public function teamsBySummoner($summonerId,$region){
 		$dbPath = 'summoner/team';
-		$dbTime = 900;
+		$dbTime = $GLOBALS['config']['cache.teams'];
 		$call = 'team/by-summoner/';
 		$leagueVersion = '2.4';
 		if (is_array($summonerId) && count($summonerId) > 1) {
@@ -669,7 +1033,7 @@ class riotapi {
 	/* Gets the teams of a summoner, given team id. It can be multiple ids. */
 	public function teamsData($teamId,$region){
 		$dbPath = 'team';
-		$dbTime = 900;
+		$dbTime = $GLOBALS['config']['cache.teams'];
 		$call = 'team/';
 		$leagueVersion = '2.4';
 		if (is_array($summonerId) && count($summonerId) > 1) {
@@ -865,5 +1229,12 @@ class riotapi {
 		{
 			//'NO_RECENT_GAMES';
 		}
+	}
+	
+}
+class stats{
+	public function calc()
+	{
+		
 	}
 }

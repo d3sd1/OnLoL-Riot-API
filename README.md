@@ -23,6 +23,15 @@ IMPORTANT: TOURNAMENTS ARE NOT ADDED, BECAUSE RIOT DIDN'T LET ME AN API KEY FOR 
 * Crypt session lang data, and decrypted to a single variable with the internal keys
 * Added log/debug option on config so you can see responses per query and the queries you made, with long descriptions, responses, status, and backtrace.
 * Added a function on stats so you can call season7 and it will get season7 stats (instead of just giving season2017)
+* Removed riot.api.regions on config.conf, so you now don't have to config the regions where your api can make requests. If your api is not made for NA, dont mke calls to NA. If it's made to all: Don't worry! =)
+* Added stats manager on config. You can enable it (or disable) on config.conf -> stats.generate
+* Added SYSTEM path for stats manager. It's ALWAYS on /database/SYSTEM/stats/[filename].json
+* Added stats generator for patches: It shows how many time you called function actualPatch() on the patch and the type of it. Filename: patches.json
+* Added default region to queries on $riot->champion()
+* Added a param to staticData() and variable ACTUAL_PATCH to riot class.
+* Added stats generator for champion(). It saves how many times you call a champion w/ or w/o ID, last time disabled, last time ranked disabled, last free to play time. For the actual patch and all patches merged.
+* Did the same about above for championFreeToPlay().
+* Added stats generator for championMastery(). It has the summoner id with more levels on the account  and it's value, summoner id with more mastery points and it's value, summoner id with more mastery points on a champ and it's value and of course the champ id. It's valid for global data (all patches) and a specific patch.
 
 # Configuration
 It's easy. Just download it obviously and go to kernel/config.conf. Edit those lanes:

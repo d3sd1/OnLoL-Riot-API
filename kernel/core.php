@@ -31,3 +31,36 @@ else
 		$userLang = $config['default.lang'];
 	}
 }
+if($config['save.last.session.queries'])
+{
+	function rmLastSessionQueriesDir()
+	{
+		foreach(glob(WEB_BASEDIR.'kernel/logs/lastSessionQueries'.'/*') as $folderFiles)
+		{
+			if (is_dir($folderFiles))
+			{
+				rmLastSessionQueriesDir($folderFiles);
+			}
+			else
+			{
+				unlink($folderFiles);
+			}
+		} 
+		rmdir(WEB_BASEDIR.'kernel/logs/lastSessionQueries');
+	}
+	if(is_dir(WEB_BASEDIR.'kernel/logs/lastSessionQueries'))
+	{
+		rmLastSessionQueriesDir();
+	}
+}
+if($config['stats.generate'])
+{
+	if(!is_dir(WEB_BASEDIR.'/'.$config['database.dir'].'/SYSTEM'))
+	{
+		mkdir(WEB_BASEDIR.'/'.$config['database.dir'].'/SYSTEM');
+	}	
+	if(!is_dir(WEB_BASEDIR.'/'.$config['database.dir'].'/SYSTEM/stats'))
+	{
+		mkdir(WEB_BASEDIR.'/'.$config['database.dir'].'/SYSTEM/stats');
+	}	
+}

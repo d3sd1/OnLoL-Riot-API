@@ -12,6 +12,34 @@ class base{
 		}
 		file_put_contents(WEB_BASEDIR.'kernel/logs/'.date('j_n_Y').'.log', '['.$allowStatus.']'.'['.date('H:i:s e').'] '.$log.PHP_EOL.PHP_EOL, FILE_APPEND);
 	}
+	public static function saveLastQueryLog($query)
+	{
+		if(!is_dir(WEB_BASEDIR.'kernel/logs/'))
+		{
+			mkdir(WEB_BASEDIR.'kernel/logs/');
+		}
+		file_put_contents(WEB_BASEDIR.'kernel/logs/lastQuery.log', $query);
+	}
+	public static function saveToErrorLog($log)
+	{
+		if(!is_dir(WEB_BASEDIR.'kernel/logs/'))
+		{
+			mkdir(WEB_BASEDIR.'kernel/logs/');
+		}
+		file_put_contents(WEB_BASEDIR.'kernel/logs/error.log', '['.date('H:i:s e').'] '.$log.PHP_EOL.PHP_EOL, FILE_APPEND);
+	}
+	public static function saveLastSessionQueries($query,$func)
+	{
+		if(!is_dir(WEB_BASEDIR.'kernel/logs/'))
+		{
+			mkdir(WEB_BASEDIR.'kernel/logs/');
+		}
+		if(!is_dir(WEB_BASEDIR.'kernel/logs/lastSessionQueries'))
+		{
+			mkdir(WEB_BASEDIR.'kernel/logs/lastSessionQueries');
+		}
+		file_put_contents(WEB_BASEDIR.'kernel/logs/lastSessionQueries/'.$func.'.log', $query.PHP_EOL.PHP_EOL, FILE_APPEND);
+	}
 	public function time()
 	{
 		return round(microtime(true) * 1000);
@@ -19,7 +47,7 @@ class base{
 	public function crypt($action, $string) {
 		$output = false;
 
-		$encrypt_method = "AES-256-CBC";
+		$encrypt_method = 'AES-256-CBC';
 		$secret_key = $GLOBALS['config']['hash.secretKey'];
 		$secret_iv = $GLOBALS['config']['hash.secretKey2'];
 		$key = hash('sha256', $secret_key);
