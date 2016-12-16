@@ -5,7 +5,7 @@ It uses Json as data storage, since it's easier and faster than mysql.
 Data storaged is also encrypted by a private keys for dont let the users get data when not allowed.
 IMPORTANT: TOURNAMENTS ARE NOT ADDED, BECAUSE RIOT DIDN'T LET ME AN API KEY FOR IT. IF YOU CAN CONTRIBUTE AND LET ME AN API KEY FOR IT I'LL WORK ON IT!!
 
-# NEW ON VERSION 1.4!!!
+# NEW ON VERSION 1.4 + 1.6!!!
 * Secured database path and files it so hard
 * Auto detect url
 * Auto detect base path
