@@ -1451,7 +1451,7 @@ class stats{
 	/* Returns stats for actualPatch */
 	public function generalPatches($patches = 'all')
 	{
-		if($patch == 'all')
+		if($patches == 'all')
 		{
 			return $this->readStatDirFull(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches');
 		}
