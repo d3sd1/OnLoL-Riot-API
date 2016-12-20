@@ -4,6 +4,14 @@ It has no errors on http requests.
 It uses Json as data storage, since it's easier and faster than mysql.
 Data storaged is also encrypted by a private keys for dont let the users get data when not allowed.
 IMPORTANT: TOURNAMENTS ARE NOT ADDED, BECAUSE RIOT DIDN'T LET ME AN API KEY FOR IT. IF YOU CAN CONTRIBUTE AND LET ME AN API KEY FOR IT I'LL WORK ON IT!!
+# NEW ON VERSION 1.7
+* Fixed a problem that the function didn't return nothing or returned a error outpot text. Now it returns the keyname 'NOT_FOUND' as it was doing all api-life long.
+* Added to config the api max values for multiqueries. riot.api.limitperquery.leagues,riot.api.limitperquery.summoners, riot.api.limitperquery.teamleagues, riot.api.limitperquery.recentgames. CONFIGURE JUST IF API CHANGES MAX VALUES.
+* Added champion mastery max level to config -> riot.api.summonerschampmastery.maxlevel
+* Added option to config.conf to set default value for update per query.
+* Added stats for currentGame(), which has information about the regions and patches called. File: activeGames.json
+* Fixed stats generator. Now it splits stats into multiple files, so it's easier and faster to load.
+* Added method $stats->generalPatches(); It returns an array with all stats by default, or for patches given (The patch has to have stats). P.e $stats->generalPatches(array('6.24','6.25'));
 
 # NEW ON VERSION 1.4 + 1.6!!!
 * Secured database path and files it so hard

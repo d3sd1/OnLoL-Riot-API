@@ -5,21 +5,20 @@ $stats = new stats();
 $servers = array('br' => 'br1', 'eune' => 'eun1', 'euw' => 'euw1', 'kr' => 'kr', 'lan' => 'la1', 'las' => 'la2', 'na' => 'na1', 'oce' => 'oc1', 'tr' => 'tr1', 'ru' => 'ru','jp' => 'jp1'); //Region => Platform ID,  'PBE' => 'PBE1' DISABLED
 
 class riotapi {
-	
 	const API_URL = 'https://{region}.api.pvp.net/api/lol/{region}/v{version}/';
 	const API_URL_MASTERY = 'https://{region}.api.pvp.net/championmastery/location/{platform}/player/';
 	const API_URL_FEATURED = 'https://{region}.api.pvp.net/observer-mode/rest/featured';
 	const API_URL_STATIC = 'https://global.api.pvp.net/api/lol/static-data/{region}/v1.2/';
 	const API_URL_SHARDS = 'http://status.leagueoflegends.com/shards';
 	const API_URL_CURRENT_GAME = 'https://{region}.api.pvp.net/observer-mode/rest/consumer/getSpectatorGameInfo/';
-	const API_LIMIT_LEAGUES = 10; //Max summoners leagues search per query
-	const API_LIMIT_SUMMONERS = 40; //Max summoners search per query
-	const API_LIMIT_TEAMS = 10; //Max teams search per query
-	const API_RECENTGAMES_LIMIT = 10; //Matchs retrieved by this function
-	private $CHAMP_MASTERY_MAX_LEVEL = 7; //Max champion mastery level
+	private $API_LIMIT_LEAGUES;
+	private $API_LIMIT_SUMMONERS;
+	private $API_LIMIT_TEAMS;
+	private $API_RECENTGAMES_LIMIT;
+	private $CHAMP_MASTERY_MAX_LEVEL;
 	private $LONG_LIMIT_INTERVAL;	
 	private $ACTUAL_SEASON;	
-	private $FORCE_UPDATE = false; //Force update default value. Recommended is false
+	private $FORCE_UPDATE;
 	private $API_KEY;
 	private $RATE_LIMIT_LONG;	
 	private $SHORT_LIMIT_INTERVAL;	
@@ -36,6 +35,12 @@ class riotapi {
 		$this->ACTUAL_SEASON = explode(',',$GLOBALS['config']['riot.api.seasons'])[0];
 		$this->CACHE_DEFAULT_INTERVAL = $GLOBALS['config']['riot.api.cache.interval.default'];
 		$this->DEFAULT_REGION = $GLOBALS['config']['default.region'];
+		$this->CHAMP_MASTERY_MAX_LEVEL = $GLOBALS['config']['riot.api.summonerschampmastery.maxlevel'];
+		$this->API_RECENTGAMES_LIMIT = $GLOBALS['config']['riot.api.limitperquery.recentgames'];
+		$this->API_LIMIT_TEAMS = $GLOBALS['config']['riot.api.limitperquery.teamleagues'];
+		$this->API_LIMIT_SUMMONERS = $GLOBALS['config']['riot.api.limitperquery.summoners'];
+		$this->API_LIMIT_LEAGUES = $GLOBALS['config']['riot.api.limitperquery.leagues'];
+		$this->FORCE_UPDATE = $GLOBALS['config']['force.update'];
 		if($API_KEY_TYPE == 'DEV')
 		{
 			$this->LONG_LIMIT_INTERVAL = 600;
@@ -291,51 +296,86 @@ class riotapi {
 		}
 		if($GLOBALS['config']['show.errors.on.exec'])
 		{
-			die('ERROR -> Function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).'), Message: '.$e->getMessage().PHP_EOL.$url);
+			echo 'ERROR -> Function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).'), Message: '.$e->getMessage().PHP_EOL.$url;
 		}
+		return $e->getMessage();
     }
 	}
+	/* Scans a dir and outpots required json data */
+	private function readStatDir($dir,$files)
+	{
+		if(!is_array($files))
+		{
+			$files = array($files);
+		}
+		$outputJson = array();
+		if ($gestor = opendir($dir)) {
+			while (false !== ($file = readdir($gestor))) {
+				if ($file != '.' && $file != '..' && array_search(str_replace('.json',null,$file),$files) !== false) {
+					$outputJson[str_replace('.json',null,$file)] = json_decode(file_get_contents($dir.((substr($dir, -1, 1) != '/')? '/':null).$file),true);
+				}
+			}
+			closedir($gestor);
+		}
+		return $outputJson;
+	}
+	
 	/* Actual patch: Returns actual patch or actual patch with dev patchs */
 	public function actualPatch($devpatchs = false)
 	{
 		$actualVersion = explode('.',$this->staticData('versions')[0]);
+		
 		if($GLOBALS['config']['stats.generate'])
 		{
-			if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches.json'))
+			$statDir = WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches';
+			$baseContent = array('global' => array('totalCalls' => 0), $this->ACTUAL_PATCH => array('callsThisPatch' => 0, 'devCalls' => 0, 'verCalls' => 0));
+			if(!is_dir($statDir))
 			{
-				$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches.json'),true);
-				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+				mkdir($statDir);
+			}
+			if(file_exists($statDir.'/global.json'))
+			{
+				if(!file_exists($statDir.'/'.$this->ACTUAL_PATCH.'.json'))
 				{
-					$preContent[$this->ACTUAL_PATCH] = array();
+					$saveStatForActualPatch = fopen($statDir.'/'.$this->ACTUAL_PATCH.'.json','w+');
+					fwrite($saveStatForActualPatch, json_encode($baseContent[$this->ACTUAL_PATCH]));
+					fclose($saveStatForActualPatch);
 				}
-				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
-				if($devpatchs == true)
-				{
-					$preContent[$this->ACTUAL_PATCH]['devCalls']++;
-				}
-				else
-				{
-					$preContent[$this->ACTUAL_PATCH]['verCalls']++;
-				}
+				$preContent = $this->readStatDir($statDir,array('global',$this->ACTUAL_PATCH)); //dir + files to be changed
 			}
 			else
 			{
-				$preContent = array($this->ACTUAL_PATCH => array('callsThisPatch' => 0, 'devCalls' => 0, 'verCalls' => 0));
-				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
-				if($devpatchs == true)
-				{
-					$preContent[$this->ACTUAL_PATCH]['devCalls']++;
-				}
-				else
-				{
-					$preContent[$this->ACTUAL_PATCH]['verCalls']++;
-				}
+				$preContent = $baseContent;
 			}
-			$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches.json','w+');
+			$preContent['global']['totalCalls']++;
+			if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+			{
+				$preContent[$this->ACTUAL_PATCH] = array();
+			}
+			$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+			if($devpatchs == true)
+			{
+				$preContent[$this->ACTUAL_PATCH]['devCalls']++;
+			}
+			else
+			{
+				$preContent[$this->ACTUAL_PATCH]['verCalls']++;
+			}
+			
+			$saveStatGlobal = fopen($statDir.'/global.json','w+');
 				
-			fwrite($saveStat, json_encode($preContent));
-			fclose($saveStat);
-		}
+			fwrite($saveStatGlobal, json_encode($preContent['global']));
+			unset($preContent['global']);
+			fclose($saveStatGlobal);
+			foreach($preContent as $patch => $patchValues)
+			{
+				$saveStatPatch = fopen($statDir.'/'.$patch.'.json','w+');
+					
+				fwrite($saveStatPatch, json_encode($patchValues));
+				fclose($saveStatPatch);
+			}
+	}
+		
 		if($devpatchs == false)
 		{
 			return $actualVersion[0].'.'.$actualVersion[1];
@@ -659,7 +699,6 @@ class riotapi {
 						$preContent[$this->ACTUAL_PATCH]['summonerIdMaxPointsSingleChamp'] = $summonerId;
 						$preContent[$this->ACTUAL_PATCH]['summonerMaxPointsSingleChampId'] = $summonerMaxPointsChampId;
 					}
-					//$preContent = array('summonerMaxLevelsMax' => $summonerLevelsMax, 'summonerIdMaxLevelsMax' => $summonerId, 'summonerMaxPoints' => $summonerTotalPoints, 'summonerIdMaxPoints' => $summonerId, 'summonerMaxPointsSingleChamp' => $summonerMaxPointsChamp, 'summonerIdMaxPointsSingleChamp' => $summonerId, 'summonerMaxPointsSingleChampId' => $summonerMaxPointsChampId);
 				}
 				else
 				{
@@ -685,7 +724,42 @@ class riotapi {
 		$dbFile = $summonerId.'_'.$region; 
 		$dbTime = $GLOBALS['config']['cache.currentgame'];
 		$call = self::API_URL_CURRENT_GAME . strtoupper($servers[$region]) . '/' . $summonerId;
-		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		$return = $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		if($GLOBALS['config']['stats.generate'])
+		{
+			if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/activeGames.json'))
+			{
+				$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/activeGames.json'),true);
+			}
+			else
+			{
+				$preContent = array('totalCalls' => 0, 'totalRegionCalls' => array(), $this->ACTUAL_PATCH => array('callsThisPatch' => 0));
+			}
+			$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+			$preContent['totalCalls']++;
+			if(!array_key_exists($region,$preContent[$this->ACTUAL_PATCH]))
+			{
+				$preContent[$this->ACTUAL_PATCH][$region] = array('callsThisPatch' => 0);
+				$preContent[$this->ACTUAL_PATCH][$region]['callsThisPatch']++;
+			}
+			else
+			{
+				$preContent[$this->ACTUAL_PATCH][$region]['callsThisPatch']++;
+			}
+			if(!array_key_exists($region,$preContent['totalRegionCalls']))
+			{
+				$preContent['totalRegionCalls'][$region] = array('callsThisPatch' => 0);
+				$preContent['totalRegionCalls'][$region]['callsThisPatch']++;
+			}
+			else
+			{
+				$preContent['totalRegionCalls'][$region]['callsThisPatch']++;
+			}
+			$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/activeGames.json','w+');	
+			fwrite($saveStat, json_encode($preContent));
+			fclose($saveStat);
+		}
+		return $return;
 	}
 	
 	/* Returns Featured Games for the given server. */
@@ -694,7 +768,116 @@ class riotapi {
 		$dbFile = $region; 
 		$dbTime = $GLOBALS['config']['cache.featuredgames'];
 		$call = self::API_URL_FEATURED;
-		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		$return = $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		if($GLOBALS['config']['stats.generate'])
+		{
+			foreach($return['gameList'] as $gameVal)
+			{
+				if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/featuredGames.json'))
+				{
+					$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/featuredGames.json'),true);
+				}
+				else
+				{
+					$preContent = array('totalCalls' => 0, 'totalRegionCalls' => array(), 'gameModes' => array(), $this->ACTUAL_PATCH => array('callsThisPatch' => 0, 'gameModes' => array()));
+				}
+				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				$preContent['totalCalls']++;
+				if(!array_key_exists($region,$preContent[$this->ACTUAL_PATCH]))
+				{
+					$preContent[$this->ACTUAL_PATCH][$region] = array('callsThisPatch' => 0);
+					$preContent[$this->ACTUAL_PATCH][$region]['callsThisPatch']++;
+					if(!array_key_exists($gameVal['gameMode'],$preContent[$this->ACTUAL_PATCH][$region]))
+					{
+						$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']] = array('callsThisPatch' => 0, 'summonersMostSearched' => array());
+						$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['callsThisPatch']++;
+						foreach($gameVal['participants'] as $summonerVal)
+						{
+							if(!array_key_exists($summonerVal['summonerName'],$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched']))
+							{
+								$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']] = 0;
+							}
+							$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']]++;
+						}
+					}
+					else
+					{
+						$preContent[$this->ACTUAL_PATCH][$region]['callsThisPatch']++;
+						if(!array_key_exists($gameVal['gameMode'],$preContent[$this->ACTUAL_PATCH]['gameModes']))
+						{
+							$preContent[$this->ACTUAL_PATCH]['gameModes'][$gameVal['gameMode']] = 0;
+						}
+						$preContent[$this->ACTUAL_PATCH]['gameModes'][$gameVal['gameMode']]++;
+						if(!array_key_exists($gameVal['gameMode'],$preContent['gameModes']))
+						{
+							$preContent['gameModes'][$gameVal['gameMode']] = 0;
+						}
+						$preContent['gameModes'][$gameVal['gameMode']]++;
+						foreach($gameVal['participants'] as $summonerVal)
+						{
+							if(!array_key_exists($summonerVal['summonerName'],$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched']))
+							{
+								$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']] = 0;
+							}
+							$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']]++;
+						}
+					}
+				}
+				else
+				{
+					$preContent[$this->ACTUAL_PATCH][$region]['callsThisPatch']++;
+					$preContent[$this->ACTUAL_PATCH][$region]['callsThisPatch']++;
+					if(!array_key_exists($gameVal['gameMode'],$preContent[$this->ACTUAL_PATCH][$region]))
+					{
+						$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']] = array('callsThisPatch' => 0, 'summonersMostSearched' => array());
+						$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['callsThisPatch']++;
+						foreach($gameVal['participants'] as $summonerVal)
+						{
+							if(!array_key_exists($summonerVal['summonerName'],$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched']))
+							{
+								$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']] = 0;
+							}
+							$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']]++;
+						}
+					}
+					else
+					{
+						$preContent[$this->ACTUAL_PATCH][$region]['callsThisPatch']++;
+						if(!array_key_exists($gameVal['gameMode'],$preContent[$this->ACTUAL_PATCH]['gameModes']))
+						{
+							$preContent[$this->ACTUAL_PATCH]['gameModes'][$gameVal['gameMode']] = 0;
+						}
+						$preContent[$this->ACTUAL_PATCH]['gameModes'][$gameVal['gameMode']]++;
+						if(!array_key_exists($gameVal['gameMode'],$preContent['gameModes']))
+						{
+							$preContent['gameModes'][$gameVal['gameMode']] = 0;
+						}
+						$preContent['gameModes'][$gameVal['gameMode']]++;
+						foreach($gameVal['participants'] as $summonerVal)
+						{
+							if(!array_key_exists($summonerVal['summonerName'],$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched']))
+							{
+								$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']] = 0;
+							}
+							$preContent[$this->ACTUAL_PATCH][$region][$gameVal['gameMode']]['summonersMostSearched'][$summonerVal['summonerName']]++;
+						}
+					}
+				}
+				if(!array_key_exists($region,$preContent['totalRegionCalls']))
+				{
+					$preContent['totalRegionCalls'][$region] = array('callsThisPatch' => 0);
+					$preContent['totalRegionCalls'][$region]['callsThisPatch']++;
+				}
+				else
+				{
+					$preContent['totalRegionCalls'][$region]['callsThisPatch']++;
+				}
+				$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/featuredGames.json','w+');	
+				fwrite($saveStat, json_encode($preContent));
+				fclose($saveStat);
+			}
+		}
+		return $return;
 	}
 	
 	/* Return Recent Games for given user ID */
@@ -716,9 +899,9 @@ class riotapi {
 		$call = 'league/by-summoner/';
 		if (is_array($summonerId) && count($summonerId) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region.str_replace('/','_',$entry);
-			if(count($summonerId) > self::API_LIMIT_LEAGUES)
+			if(count($summonerId) > $this->API_LIMIT_LEAGUES)
 			{
-				$summonerIds = array_chunk($summonerId,self::API_LIMIT_LEAGUES,true);
+				$summonerIds = array_chunk($summonerId,$this->API_LIMIT_LEAGUES,true);
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
@@ -754,9 +937,9 @@ class riotapi {
 		$call = 'league/by-team/';
 		if (is_array($teamId) && count($teamId) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region.str_replace('/','_',$entry);
-			if(count($teamId) > self::API_LIMIT_LEAGUES)
+			if(count($teamId) > $this->API_LIMIT_LEAGUES)
 			{
-				$summonerIds = array_chunk($teamId,self::API_LIMIT_LEAGUES,true);
+				$summonerIds = array_chunk($teamId,$this->API_LIMIT_LEAGUES,true);
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
@@ -914,9 +1097,9 @@ class riotapi {
 		$leagueVersion = '1.4';
 		if (is_array($summonerName) && count($summonerName) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region;
-			if(count($summonerName) > self::API_LIMIT_SUMMONERS)
+			if(count($summonerName) > $this->API_LIMIT_SUMMONERS)
 			{
-				$summonerNames = array_chunk($summonerName,self::API_LIMIT_SUMMONERS,true);
+				$summonerNames = array_chunk($summonerName,$this->API_LIMIT_SUMMONERS,true);
 				$return = null;
 				foreach($summonerNames as $summonersChunked)
 				{
@@ -966,9 +1149,9 @@ class riotapi {
 		}
 		if (is_array($summonerId) && count($summonerId) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region.str_replace('/','_',$option);
-			if(count($summonerId) > self::API_LIMIT_SUMMONERS)
+			if(count($summonerId) > $this->API_LIMIT_SUMMONERS)
 			{
-				$summonerIds = array_chunk($summonerId,self::API_LIMIT_SUMMONERS,true);
+				$summonerIds = array_chunk($summonerId,$this->API_LIMIT_SUMMONERS,true);
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
@@ -1002,9 +1185,9 @@ class riotapi {
 		$leagueVersion = '2.4';
 		if (is_array($summonerId) && count($summonerId) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region;
-			if(count($summonerId) > self::API_LIMIT_TEAMS)
+			if(count($summonerId) > $this->API_LIMIT_TEAMS)
 			{
-				$summonerIds = array_chunk($summonerId,self::API_LIMIT_TEAMS,true);
+				$summonerIds = array_chunk($summonerId,$this->API_LIMIT_TEAMS,true);
 				$return = null;
 				foreach($summonerIds as $summonersChunked)
 				{
@@ -1038,9 +1221,9 @@ class riotapi {
 		$leagueVersion = '2.4';
 		if (is_array($summonerId) && count($summonerId) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region;
-			if(count($teamId) > self::API_LIMIT_TEAMS)
+			if(count($teamId) > $this->API_LIMIT_TEAMS)
 			{
-				$teamIds = array_chunk($teamId,self::API_LIMIT_TEAMS,true);
+				$teamIds = array_chunk($teamId,$this->API_LIMIT_TEAMS,true);
 				$return = null;
 				foreach($teamIds as $teamsChunked)
 				{
@@ -1233,8 +1416,48 @@ class riotapi {
 	
 }
 class stats{
-	public function calc()
+	/* Scans a dir and outpots all json data */
+	private function readStatDirFull($dir)
 	{
-		
+		$outputJson = array();
+		if ($gestor = opendir($dir)) {
+			while (false !== ($file = readdir($gestor))) {
+				if ($file != "." && $file != "..") {
+					$outputJson[str_replace('.json',null,$file)] = json_decode(file_get_contents($dir.((substr($dir, -1, 1) != '/')? '/':null).$file),true);
+				}
+			}
+			closedir($gestor);
+		}
+		return $outputJson;
+	}
+	/* Scans a dir and outpots required json data */
+	private function readStatDir($dir,$files)
+	{
+		if(!is_array($files))
+		{
+			$files = array($files);
+		}
+		$outputJson = array();
+		if ($gestor = opendir($dir)) {
+			while (false !== ($file = readdir($gestor))) {
+				if ($file != '.' && $file != '..' && array_search(str_replace('.json',null,$file),$files) !== false) {
+					$outputJson[str_replace('.json',null,$file)] = json_decode(file_get_contents($dir.((substr($dir, -1, 1) != '/')? '/':null).$file),true);
+				}
+			}
+			closedir($gestor);
+		}
+		return $outputJson;
+	}
+	/* Returns stats for actualPatch */
+	public function generalPatches($patches = 'all')
+	{
+		if($patch == 'all')
+		{
+			return $this->readStatDirFull(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches');
+		}
+		else
+		{
+			return $this->readStatDir(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches',$patches);
+		}
 	}
 }
