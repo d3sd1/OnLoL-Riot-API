@@ -12,6 +12,8 @@ IMPORTANT: TOURNAMENTS ARE NOT ADDED, BECAUSE RIOT DIDN'T LET ME AN API KEY FOR 
 * Added stats for currentGame(), which has information about the regions and patches called. File: activeGames.json
 * Fixed stats generator. Now it splits stats into multiple files, so it's easier and faster to load.
 * Added method $stats->generalPatches(); It returns an array with all stats by default, or for patches given (The patch has to have stats). P.e $stats->generalPatches(array('6.24','6.25'));
+* Added method $stats->champStatusInformation(); It returns an array with the last disable time, last ranked unabled to play, last rotation time etc, for all or for a given patch (same as up).
+* Fixed default region for championFreeToPlay().
 
 # NEW ON VERSION 1.4 + 1.6!!!
 * Secured database path and files it so hard

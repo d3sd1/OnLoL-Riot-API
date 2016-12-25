@@ -296,7 +296,7 @@ class riotapi {
 		}
 		if($GLOBALS['config']['show.errors.on.exec'])
 		{
-			echo 'ERROR -> Function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).'), Message: '.$e->getMessage().PHP_EOL.$url;
+			echo 'ERROR -> Function: '.debug_backtrace()[1]['function'].'('.@implode(',',debug_backtrace()[1]['args']).'), Message: '.$e->getMessage().PHP_EOL.str_replace($GLOBALS['config']['riot.api.key'],null,$url);
 		}
 		return $e->getMessage();
     }
@@ -374,7 +374,7 @@ class riotapi {
 				fwrite($saveStatPatch, json_encode($patchValues));
 				fclose($saveStatPatch);
 			}
-	}
+		}
 		
 		if($devpatchs == false)
 		{
@@ -410,108 +410,122 @@ class riotapi {
 		$return = $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 		if($GLOBALS['config']['stats.generate'])
 		{
-			if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'))
+			$statDir = WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champions';
+			$baseContent = array('global' => array('totalCalls' => 0, 'champIdGivenCalls' => 0, 'allChampCalls' => 0));
+			$patchBaseContent = array('numberCalledTimes' => 0, 'lastDisabledTimeRanked' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
+			if(!is_dir($statDir))
 			{
-				$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'),true);
-				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+				mkdir($statDir);
+			}
+			if(file_exists($statDir.'/global.json'))
+			{
+				if(!file_exists($statDir.'/'.$this->ACTUAL_PATCH.'.json'))
 				{
-					$preContent[$this->ACTUAL_PATCH] = array();
+					$saveStatForActualPatch = fopen($statDir.'/'.$this->ACTUAL_PATCH.'.json','w+');
+					fwrite($saveStatForActualPatch, json_encode($baseContent[$this->ACTUAL_PATCH]));
+					fclose($saveStatForActualPatch);
 				}
-				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
-				if($id != null)
+				$preContent = $this->readStatDir($statDir,array('global',$this->ACTUAL_PATCH,'champId_'.$id)); //dir + files to be changed
+			}
+			else
+			{
+				$preContent = $baseContent;
+			}
+			if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
+			{
+				$preContent[$this->ACTUAL_PATCH] = array('numberCalledTimes' => 0, 'champIdGivenCalls' => 0, 'allChampCalls' => 0);
+			}
+			$preContent['global']['totalCalls']++;
+			$preContent[$this->ACTUAL_PATCH]['numberCalledTimes']++;
+			if($id != null)
+			{
+				$preContent['global']['champIdGivenCalls']++;
+				$preContent[$this->ACTUAL_PATCH]['champIdGivenCalls']++;
+				if(!array_key_exists('champId_'.$id,$preContent[$this->ACTUAL_PATCH]))
 				{
-					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
-					{
-						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
-					}
-					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
-					if($return['rankedPlayEnabled'] == false)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
-					}
-					if($return['freeToPlay'] == true)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
-					}
-					if($return['active'] == false)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
-					}
-					/* Now do the same but on all patches */
-					if(!array_key_exists($id,$preContent))
-					{
-						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
-					}
-					$preContent[$id]['totalCalls']++;
-					if($return['rankedPlayEnabled'] == false)
-					{
-						$preContent[$id]['lastDisabledTimeRanked'] = time();
-					}
-					if($return['freeToPlay'] == true)
-					{
-						$preContent[$id]['lastFreeToPlayTime'] = time();
-					}
-					if($return['active'] == false)
-					{
-						$preContent[$id]['lastDisabledTime'] = time();
-					}
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id] = $patchBaseContent;
+				}
+				$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['numberCalledTimes']++;
+				if($return['rankedPlayEnabled'] == false)
+				{
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTimeRanked'] = time();
+				}
+				else
+				{
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTimeRanked'] = 0;
+				}
+				if($return['freeToPlay'] == true)
+				{
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastFreeToPlayTime'] = time();
+				}
+				else
+				{
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastFreeToPlayTime'] = 0;
+				}
+				if($return['active'] == false)
+				{
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTime'] = time();
+				}
+				else
+				{
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTime'] = 0;
+				}
+				/* Now do the same but on all patches */
+				if(!array_key_exists('champId_'.$id,$preContent))
+				{
+					$preContent['champId_'.$id] = $patchBaseContent;
+				}
+				$preContent['champId_'.$id]['numberCalledTimes']++;
+				if($return['rankedPlayEnabled'] == false)
+				{
+					$preContent['champId_'.$id]['lastDisabledTimeRanked'] = time();
+				}
+				else
+				{
+					$preContent['champId_'.$id]['lastDisabledTimeRanked'] = 0;
+				}
+				if($return['freeToPlay'] == true)
+				{
+					$preContent['champId_'.$id]['lastFreeToPlayTime'] = time();
+				}
+				else
+				{
+					$preContent['champId_'.$id]['lastFreeToPlayTime'] = 0;
+				}
+				if($return['active'] == false)
+				{
+					$preContent['champId_'.$id]['lastDisabledTime'] = time();
+				}
+				else
+				{
+					$preContent['champId_'.$id]['lastDisabledTime'] = 0;
 				}
 			}
 			else
 			{
-				$preContent = array($this->ACTUAL_PATCH => array('callsThisPatch' => 0));
-				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
-				{
-					$preContent[$this->ACTUAL_PATCH] = array();
-				}
-				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
-				if($id != null)
-				{
-					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
-					{
-						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
-					}
-					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
-					if($return['rankedPlayEnabled'] == false)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
-					}
-					if($return['freeToPlay'] == true)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
-					}
-					if($return['active'] == false)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
-					}
-					/* Now do the same but on all patches */
-					if(!array_key_exists($id,$preContent))
-					{
-						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
-					}
-					$preContent[$id]['totalCalls']++;
-					if($return['rankedPlayEnabled'] == false)
-					{
-						$preContent[$id]['lastDisabledTimeRanked'] = time();
-					}
-					if($return['freeToPlay'] == true)
-					{
-						$preContent[$id]['lastFreeToPlayTime'] = time();
-					}
-					if($return['active'] == false)
-					{
-						$preContent[$id]['lastDisabledTime'] = time();
-					}
-				}
+				$preContent['global']['allChampCalls']++;
+				$preContent[$this->ACTUAL_PATCH]['allChampCalls']++;
 			}
-			$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json','w+');
-			fwrite($saveStat, json_encode($preContent));
-			fclose($saveStat);
+			$saveStatGlobal = fopen($statDir.'/global.json','w+');
+				
+			fwrite($saveStatGlobal, json_encode($preContent['global']));
+			unset($preContent['global']);
+			fclose($saveStatGlobal);
+			foreach($preContent as $patch => $patchValues)
+			{
+				$saveStatPatch = fopen($statDir.'/'.$patch.'.json','w+');
+				fwrite($saveStatPatch, json_encode($patchValues));
+				fclose($saveStatPatch);
+			}
 		}
 		return $return;
 	}
 	/* Returns Free To Play champions */
-	public function championFreeToPlay($region='euw'){ //It uses same array keys than champion() on stats
+	public function championFreeToPlay($region='NOT_SET'){ //It uses same array keys than champion() on stats
+		if($region == 'NOT_SET')
+		{
+			$region = $this->DEFAULT_REGION;
+		}
 		$dbPath = 'champions';
 		$dbFile = 'freetoplay_'.$region;
 		$dbTime = $GLOBALS['config']['cache.champions'];
@@ -520,114 +534,123 @@ class riotapi {
 		$return = $this->request($call,$dbPath,$dbFile,$dbTime,$region,true);
 		if($GLOBALS['config']['stats.generate'])
 		{
-		foreach($return['champions'] as $champ)
-		{
-			$id = $champ['id'];
-			if(file_exists(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'))
+			foreach($return['champions'] as $champ)
 			{
-				$preContent = json_decode(file_get_contents(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json'),true);
+				$id = $champ['id'];
+				$statDir = WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champions';
+				$baseContent = array('global' => array('totalCalls' => 0, 'champIdGivenCalls' => 0, 'allChampCalls' => 0));
+				$patchBaseContent = array('numberCalledTimes' => 0, 'lastDisabledTimeRanked' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
+				if(!is_dir($statDir))
+				{
+					mkdir($statDir);
+				}
+				if(file_exists($statDir.'/global.json'))
+				{
+					if(!file_exists($statDir.'/'.$this->ACTUAL_PATCH.'.json'))
+					{
+						$saveStatForActualPatch = fopen($statDir.'/'.$this->ACTUAL_PATCH.'.json','w+');
+						fwrite($saveStatForActualPatch, json_encode($baseContent[$this->ACTUAL_PATCH]));
+						fclose($saveStatForActualPatch);
+					}
+					$preContent = $this->readStatDir($statDir,array('global',$this->ACTUAL_PATCH,'champId_'.$id)); //dir + files to be changed
+				}
+				else
+				{
+					$preContent = $baseContent;
+				}
 				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
 				{
-					$preContent[$this->ACTUAL_PATCH] = array();
+					$preContent[$this->ACTUAL_PATCH] = array('numberCalledTimes' => 0, 'champIdGivenCalls' => 0, 'allChampCalls' => 0);
 				}
-				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
+				$preContent['global']['totalCalls']++;
+				$preContent[$this->ACTUAL_PATCH]['numberCalledTimes']++;
 				if($id != null)
 				{
-					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
+					$preContent['global']['champIdGivenCalls']++;
+					$preContent[$this->ACTUAL_PATCH]['champIdGivenCalls']++;
+					if(!array_key_exists('champId_'.$id,$preContent[$this->ACTUAL_PATCH]))
 					{
-						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
+						$preContent[$this->ACTUAL_PATCH]['champId_'.$id] = $patchBaseContent;
 					}
-					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
+					$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['numberCalledTimes']++;
 					if($champ['rankedPlayEnabled'] == false)
 					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
+						$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTimeRanked'] = time();
+					}
+					else
+					{
+						$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTimeRanked'] = 0;
 					}
 					if($champ['freeToPlay'] == true)
 					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
+						$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastFreeToPlayTime'] = time();
+					}
+					else
+					{
+						$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastFreeToPlayTime'] = 0;
 					}
 					if($champ['active'] == false)
 					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
+						$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTime'] = time();
+					}
+					else
+					{
+						$preContent[$this->ACTUAL_PATCH]['champId_'.$id]['lastDisabledTime'] = 0;
 					}
 					/* Now do the same but on all patches */
-					if(!array_key_exists($id,$preContent))
+					if(!array_key_exists('champId_'.$id,$preContent))
 					{
-						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
+						$preContent['champId_'.$id] = $patchBaseContent;
 					}
-					$preContent[$id]['totalCalls']++;
+					$preContent['champId_'.$id]['numberCalledTimes']++;
 					if($champ['rankedPlayEnabled'] == false)
 					{
-						$preContent[$id]['lastDisabledTimeRanked'] = time();
+						$preContent['champId_'.$id]['lastDisabledTimeRanked'] = time();
+					}
+					else
+					{
+						$preContent['champId_'.$id]['lastDisabledTimeRanked'] = 0;
 					}
 					if($champ['freeToPlay'] == true)
 					{
-						$preContent[$id]['lastFreeToPlayTime'] = time();
+						$preContent['champId_'.$id]['lastFreeToPlayTime'] = time();
+					}
+					else
+					{
+						$preContent['champId_'.$id]['lastFreeToPlayTime'] = 0;
 					}
 					if($champ['active'] == false)
 					{
-						$preContent[$id]['lastDisabledTime'] = time();
+						$preContent['champId_'.$id]['lastDisabledTime'] = time();
 					}
+					else
+					{
+						$preContent['champId_'.$id]['lastDisabledTime'] = 0;
+					}
+				}
+				else
+				{
+					$preContent['global']['allChampCalls']++;
+					$preContent[$this->ACTUAL_PATCH]['allChampCalls']++;
+				}
+				$saveStatGlobal = fopen($statDir.'/global.json','w+');
+					
+				fwrite($saveStatGlobal, json_encode($preContent['global']));
+				unset($preContent['global']);
+				fclose($saveStatGlobal);
+				foreach($preContent as $patch => $patchValues)
+				{
+					$saveStatPatch = fopen($statDir.'/'.$patch.'.json','w+');
+					fwrite($saveStatPatch, json_encode($patchValues));
+					fclose($saveStatPatch);
 				}
 			}
-			else
-			{
-				$preContent = array($this->ACTUAL_PATCH => array('callsThisPatch' => 0));
-				if(!array_key_exists($this->ACTUAL_PATCH,$preContent))
-				{
-					$preContent[$this->ACTUAL_PATCH] = array();
-				}
-				$preContent[$this->ACTUAL_PATCH]['callsThisPatch']++;
-				if($id != null)
-				{
-					if(!array_key_exists($id,$preContent[$this->ACTUAL_PATCH]))
-					{
-						$preContent[$this->ACTUAL_PATCH][$id] = array('callsThisPatch' => 0, 'lastDisabledTimeRankedPatch' => 0, 'lastFreeToPlayTimePatch' => 0, 'lastDisabledTimePatch' => 0);
-					}
-					$preContent[$this->ACTUAL_PATCH][$id]['callsThisPatch']++;
-					if($champ['rankedPlayEnabled'] == false)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimeRankedPatch'] = time();
-					}
-					if($champ['freeToPlay'] == true)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastFreeToPlayTimePatch'] = time();
-					}
-					if($champ['active'] == false)
-					{
-						$preContent[$this->ACTUAL_PATCH][$id]['lastDisabledTimePatch'] = time();
-					}
-					/* Now do the same but on all patches */
-					if(!array_key_exists($id,$preContent))
-					{
-						$preContent[$id] = array('totalCalls' => 0, 'lastDisabledTime' => 0, 'lastFreeToPlayTime' => 0, 'lastDisabledTime' => 0);
-					}
-					$preContent[$id]['totalCalls']++;
-					if($champ['rankedPlayEnabled'] == false)
-					{
-						$preContent[$id]['lastDisabledTimeRanked'] = time();
-					}
-					if($champ['freeToPlay'] == true)
-					{
-						$preContent[$id]['lastFreeToPlayTime'] = time();
-					}
-					if($champ['active'] == false)
-					{
-						$preContent[$id]['lastDisabledTime'] = time();
-					}
-				}
-			}
-			
-			$saveStat = fopen(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champs.json','w+');
-			fwrite($saveStat, json_encode($preContent));
-			fclose($saveStat);
-		  }
 		}
 		return $return;
 	}
 	
 	/* Returns Champion Mastery for given user ID. */
-	public function championMastery($summonerId,$region){
+	public function championMastery($summonerId,$region){ // ME HE QUEDADO AQUIX D
 		global $servers;
 		$dbPath = 'summoner/mastery';
 		$dbFile = $summonerId.'_'.$region; 
@@ -1448,7 +1471,7 @@ class stats{
 		}
 		return $outputJson;
 	}
-	/* Returns stats for actualPatch */
+	/* Returns stats for actualPatch() */
 	public function generalPatches($patches = 'all')
 	{
 		if($patches == 'all')
@@ -1458,6 +1481,18 @@ class stats{
 		else
 		{
 			return $this->readStatDir(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/patches',$patches);
+		}
+	}
+	/* Return stats for champion() */
+	public function champStatusInformation($patches = 'all')
+	{
+		if($patches == 'all')
+		{
+			return $this->readStatDirFull(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champions');
+		}
+		else
+		{
+			return $this->readStatDir(WEB_BASEDIR.'/'.$GLOBALS['config']['database.dir'].'/SYSTEM/stats/champions',$patches);
 		}
 	}
 }

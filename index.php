@@ -4,9 +4,9 @@ include('kernel/core.php');
 	Global variables:
 		$userLang - Returns user language
 */
-    $r = $api->actualPatch( 'euw');
+    $r = $api->championFreeToPlay();
     print_r($r);
 	echo '<br>Stats given:<br>';
-	$statsGiven = $stats->generalPatches();
+	$statsGiven = $stats->champStatusInformation();
 	print_r($statsGiven);
 ?>
