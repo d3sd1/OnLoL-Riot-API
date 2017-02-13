@@ -3,7 +3,15 @@ Riot api base for PHP. Updated constantly and almost without bugs!
 It has no errors on http requests.
 It uses Json as data storage, since it's easier and faster than mysql.
 Data storaged is also encrypted by a private keys for dont let the users get data when not allowed.
-IMPORTANT: TOURNAMENTS ARE NOT ADDED, BECAUSE RIOT DIDN'T LET ME AN API KEY FOR IT. IF YOU CAN CONTRIBUTE AND LET ME AN API KEY FOR IT I'LL WORK ON IT!!
+# NEW ON VERSION 1.8 (TOURNAMENTS ARE HERE!)
+* Removed riot.api.seasons from config. Instead, put an auto season detecter.
+* added method actualSeason() -> Retrieves last season available.
+* added catch error methods for non-existant api key.
+* added tournaments support.
+* added method $tournament->createTournament($name, $postGameResultsUrl, $teamSize, $spectatorType = 'ALL', $pickType = 'TOURNAMENT_DRAFT', $mapType = 'SUMMONERS_RIFT', $region = 'NOT_SET', $allowedSummonerIds = null, $metaData = null) which returns created tournament info and the codes for joining the lobby room. 
+* added method $tournament->lobbyEvents($tournamentId,$region) which returns events done at loby.
+* upgraded class constructors.
+
 # NEW ON VERSION 1.7
 * Fixed a problem that the function didn't return nothing or returned a error outpot text. Now it returns the keyname 'NOT_FOUND' as it was doing all api-life long.
 * Added to config the api max values for multiqueries. riot.api.limitperquery.leagues,riot.api.limitperquery.summoners, riot.api.limitperquery.teamleagues, riot.api.limitperquery.recentgames. CONFIGURE JUST IF API CHANGES MAX VALUES.

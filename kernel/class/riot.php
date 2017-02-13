@@ -1,9 +1,9 @@
 <?php
 require('cache.php');
-$api = new riotapi(new FileSystemCache(),$config['riot.api.key.type']);
+$api = new riotapi(new FileSystemCache());
 $stats = new stats();
 $servers = array('br' => 'br1', 'eune' => 'eun1', 'euw' => 'euw1', 'kr' => 'kr', 'lan' => 'la1', 'las' => 'la2', 'na' => 'na1', 'oce' => 'oc1', 'tr' => 'tr1', 'ru' => 'ru','jp' => 'jp1'); //Region => Platform ID,  'PBE' => 'PBE1' DISABLED
-
+require('riotTournaments.php');
 class riotapi {
 	const API_URL = 'https://{region}.api.pvp.net/api/lol/{region}/v{version}/';
 	const API_URL_MASTERY = 'https://{region}.api.pvp.net/championmastery/location/{platform}/player/';
@@ -20,19 +20,20 @@ class riotapi {
 	private $ACTUAL_SEASON;	
 	private $FORCE_UPDATE;
 	private $API_KEY;
+	private $API_KEY_TYPE;
 	private $RATE_LIMIT_LONG;	
 	private $SHORT_LIMIT_INTERVAL;	
 	private $RATE_LIMIT_SHORT;	
 	private $CACHE;
-	private $DEFAULT_REGION;
+	public $DEFAULT_REGION;
 	private $ACTUAL_PATCH;
 
-	private static $errorCodes = array(0 => 'NO_RESPONSE',400 => 'BAD_REQUEST',401 => 'UNAUTHORIZED',403 => 'ACCESS_DENIED',404 => 'NOT_FOUND',429 => 'RATE_LIMIT_EXCEEDED',500 => 'SERVER_ERROR',503 => 'UNAVAILABLE');
+	public static $errorCodes = array(0 => 'NO_RESPONSE',400 => 'BAD_REQUEST',401 => 'UNAUTHORIZED',403 => 'ACCESS_DENIED',404 => 'NOT_FOUND',429 => 'RATE_LIMIT_EXCEEDED',500 => 'SERVER_ERROR',503 => 'UNAVAILABLE');
 
-	public function __construct(CacheInterface $CACHE = null,$API_KEY_TYPE)
+	public function __construct(CacheInterface $CACHE = null)
 	{
 		$this->API_KEY = $GLOBALS['config']['riot.api.key'];
-		$this->ACTUAL_SEASON = explode(',',$GLOBALS['config']['riot.api.seasons'])[0];
+		$this->API_KEY_TYPE = $GLOBALS['config']['riot.api.key.type'];
 		$this->CACHE_DEFAULT_INTERVAL = $GLOBALS['config']['riot.api.cache.interval.default'];
 		$this->DEFAULT_REGION = $GLOBALS['config']['default.region'];
 		$this->CHAMP_MASTERY_MAX_LEVEL = $GLOBALS['config']['riot.api.summonerschampmastery.maxlevel'];
@@ -41,7 +42,7 @@ class riotapi {
 		$this->API_LIMIT_SUMMONERS = $GLOBALS['config']['riot.api.limitperquery.summoners'];
 		$this->API_LIMIT_LEAGUES = $GLOBALS['config']['riot.api.limitperquery.leagues'];
 		$this->FORCE_UPDATE = $GLOBALS['config']['force.update'];
-		if($API_KEY_TYPE == 'DEV')
+		if($this->API_KEY_TYPE == 'DEV')
 		{
 			$this->LONG_LIMIT_INTERVAL = 600;
 			$this->RATE_LIMIT_LONG = 500;
@@ -62,6 +63,7 @@ class riotapi {
 		$this->cache = $CACHE;
 		$actualVersion = explode('.',$this->staticData('versions', $fulldata = false, $locale = 'en_US', $version = null, $region='NOT_SET', $id=null, $classCall = false)[0]);
 		$this->ACTUAL_PATCH = $actualVersion[0].'.'.$actualVersion[1];
+		$this->ACTUAL_SEASON = $this->actualSeason();
 	}
 	/* Internal Function */
 	public function forceUpdate($status = true){
@@ -96,6 +98,10 @@ class riotapi {
 	
 	/* Internal Function */
 	private function request($call, $dbPath, $dbFile, $dbTime = 'NOT_SET', $region = null, $otherQueries = false, $static = false) {
+            if($this->API_KEY == null)
+            {
+                die('You must put an api key into kernel/config.conf in order to make calls.');
+            }
 	try{
 		if($dbTime == 'NOT_SET')
 		{
@@ -180,7 +186,7 @@ class riotapi {
 			}
 	
 			$ch = curl_init($url);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);	
 		
@@ -319,7 +325,10 @@ class riotapi {
 		}
 		return $outputJson;
 	}
-	
+	public function actualSeason()
+        {
+            return 'SEASON'.substr(date('Y'),0,-1).explode('.',$this->staticData('versions')[0])[0];
+        }
 	/* Actual patch: Returns actual patch or actual patch with dev patchs */
 	public function actualPatch($devpatchs = false)
 	{
