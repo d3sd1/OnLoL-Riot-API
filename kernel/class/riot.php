@@ -917,8 +917,7 @@ class riotapi {
 		$dbPath = 'summoner/games/';
 		$dbFile = $summonerId.'_'.$region; 
 		$dbTime = $GLOBALS['config']['cache.recentgames'];
-		$call = 'game/by-summoner/' . $summonerId . '/recent';
-		$call = str_replace('{version}','1.3',self::API_URL). $call;
+		$call = str_replace('{version}','3',self::API_URL). 'matchlists/by-account/' . $summonerId . '/recent';
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 	}
 	
@@ -1088,8 +1087,16 @@ class riotapi {
 		$dbPath = 'match';
 		$dbFile = $matchId.'_'.$region.($timeLine ? '_timeline' : null); 
 		$dbTime = $GLOBALS['config']['cache.matches'];
-		$call = str_replace('{version}','2.2',self::API_URL)  . 'match/' . $matchId . ($timeLine ? '?includeTimeline=true' : '');
-		return $this->request($call,$dbPath,$dbFile,$dbTime,$region,$timeLine);
+		$call = str_replace('{version}','3',self::API_URL)  . 'matches/' . $matchId;
+		if($timeLine)
+		{
+			$ret = $this->request($call,$dbPath,$dbFile,$dbTime,$region,$timeLine) . $this->request(str_replace('{version}','3',self::API_URL)  . 'timelines/by-match/' . $matchId,$dbPath,$dbFile,$dbTime,$region,$timeLine);
+		}
+		else
+		{
+			$ret = $this->request($call,$dbPath,$dbFile,$dbTime,$region,$timeLine);
+		}
+		return $ret;
 	}
 
 	/* Returns all ranked games played (since S3) given summoner id. */
@@ -1097,7 +1104,7 @@ class riotapi {
 		$dbPath = 'summoner/matchlist';
 		$dbFile = $summonerId.'_'.$region; 
 		$dbTime = $GLOBALS['config']['cache.matchhistory'];
-		$call = str_replace('{version}','2.2',self::API_URL) . 'matchlist/by-summoner/' . $summonerId;
+		$call = str_replace('{version}','3',self::API_URL) . 'v3/matchlists/by-account/' . $summonerId;
 		return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 	}
 	
