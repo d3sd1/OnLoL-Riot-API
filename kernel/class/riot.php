@@ -1130,10 +1130,10 @@ class riotapi {
 
 	/* Returns summoner info giving name */
 	public function summonerByName($summonerName,$region){
-		$call = 'summoner/by-name/';
+		$call = 'summoners/by-name/';
 		$dbPath = 'summoner/name';
 		$dbTime = $GLOBALS['config']['cache.summoners'];
-		$leagueVersion = '1.4';
+		$leagueVersion = '3';
 		if (is_array($summonerName) && count($summonerName) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region;
 			if(count($summonerName) > $this->API_LIMIT_SUMMONERS)
@@ -1167,11 +1167,11 @@ class riotapi {
 	}
 	
 	/* Returns summoner info given summoner id. You can set multiple summoners. $option can be: masteries,runes,name. */
-	public function summonerById($summonerId,$region,$option=null){
+	public function summonerBySummonerId($summonerId,$region,$option=null){
 		$dbPath = 'summoner/id';
 		$dbTime = $GLOBALS['config']['cache.summoners'];
-		$call = 'summoner/';
-		$leagueVersion = '1.4';
+		$call = 'summoners/';
+		$leagueVersion = '3';
 		switch ($option) {
 			case 'masteries':
 				$option = '/masteries';
@@ -1216,6 +1216,54 @@ class riotapi {
 		}
 	}
 
+	public function summonerByAccountId($accountId,$region,$option=null){
+		$dbPath = 'summoner/id';
+		$dbTime = $GLOBALS['config']['cache.summoners'];
+		$call = 'summoners//by-account/';
+		$leagueVersion = '3';
+		switch ($option) {
+			case 'masteries':
+				$option = '/masteries';
+				break;
+			case 'runes':
+				$option = '/runes';
+				break;
+			case 'name':
+				$option = '/name';
+				break;
+			default:
+			$option = null;
+				break;
+		}
+		if (is_array($summonerId) && count($summonerId) > 1) {
+			$dbFile = '{strSingle}'.'_'.$region.str_replace('/','_',$option);
+			if(count($summonerId) > $this->API_LIMIT_SUMMONERS)
+			{
+				$summonerIds = array_chunk($summonerId,$this->API_LIMIT_SUMMONERS,true);
+				$return = null;
+				foreach($summonerIds as $summonersChunked)
+				{
+					$call .= rawurlencode(implode(",", $summonersChunked));
+					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $option;
+					$return .= $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+				}
+				return $return;
+			}
+			else
+			{
+				$call .= rawurlencode(implode(",", $summonerId));
+				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $option;
+				return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+			}
+		}
+		else {
+			(is_array($summonerId)) ? $summonerId = implode(null,$summonerId):null;
+			$dbFile = $summonerId.'_'.$region.($option != null ? '_'.$option : null); 
+			$call .= $summonerId;
+			$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call . $option;
+			return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
+		}
+	}
 	/* Gets the teams of a summoner, given summoner id. It can be multiple ids. */
 	public function teamsBySummoner($summonerId,$region){
 		$dbPath = 'summoner/team';
