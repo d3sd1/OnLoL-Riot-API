@@ -1130,6 +1130,39 @@ class riotapi {
 
 	/* Returns summoner info giving name */
 	public function summonerByName($summonerName,$region){
+		switch($region)
+		{
+			case 'ru':
+			$region = 'RU';
+			break;
+			case 'kr':
+			$region = 'KR';
+			break;
+			case 'tr':
+			$region = 'TR1';
+			break;
+			case 'jp':
+			$region = 'JP1';
+			break;
+			case 'na':
+			$region = 'NA1';
+			break;
+			case 'eune':
+			$region = 'EUN1';
+			break;
+			case 'euw':
+			$region = 'EUW1';
+			break;
+			case 'oc':
+			$region = 'OC1';
+			break;
+			case 'lan':
+			$region = 'LA1';
+			break;
+			case 'las':
+			$region = 'LA2';
+			break;
+		}
 		$call = 'summoners/by-name/';
 		$dbPath = 'summoner/name';
 		$dbTime = $GLOBALS['config']['cache.summoners'];
