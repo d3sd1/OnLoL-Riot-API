@@ -6,7 +6,6 @@ $servers = array('br' => 'br1', 'eune' => 'eun1', 'euw' => 'euw1', 'kr' => 'kr',
 require('riotTournaments.php');
 class riotapi {
 	const API_URL = 'https://{region}.api.pvp.net/api/lol/{region}/v{version}/';
-	const API_URL_V3 = 'https://{region}.api.riotgames.com/lol/';
 	const API_URL_MASTERY = 'https://{region}.api.pvp.net/championmastery/location/{platform}/player/';
 	const API_URL_FEATURED = 'https://{region}.api.pvp.net/observer-mode/rest/featured';
 	const API_URL_STATIC = 'https://global.api.pvp.net/api/lol/static-data/{region}/v1.2/';
@@ -1131,43 +1130,43 @@ class riotapi {
 
 	/* Returns summoner info giving name */
 	public function summonerByName($summonerName,$region){
-		switch(strtolower($region))
+		switch($region)
 		{
 			case 'ru':
-			$regionStr = 'RU';
+			$region = 'RU';
 			break;
 			case 'kr':
-			$regionStr = 'KR';
+			$region = 'KR';
 			break;
 			case 'tr':
-			$regionStr = 'TR1';
+			$region = 'TR1';
 			break;
 			case 'jp':
-			$regionStr = 'JP1';
+			$region = 'JP1';
 			break;
 			case 'na':
-			$regionStr = 'NA1';
+			$region = 'NA1';
 			break;
 			case 'eune':
-			$regionStr = 'EUN1';
+			$region = 'EUN1';
 			break;
 			case 'euw':
-			$regionStr = 'EUW1';
+			$region = 'EUW1';
 			break;
 			case 'oc':
-			$regionStr = 'OC1';
+			$region = 'OC1';
 			break;
 			case 'lan':
-			$regionStr = 'LA1';
+			$region = 'LA1';
 			break;
 			case 'las':
-			$regionStr = 'LA2';
+			$region = 'LA2';
 			break;
 		}
-		$leagueVersion = '3';
-		$call = 'summoner/v'.$leagueVersion.'/summoners/by-name/';
+		$call = 'summoners/by-name/';
 		$dbPath = 'summoner/name';
 		$dbTime = $GLOBALS['config']['cache.summoners'];
+		$leagueVersion = '3';
 		if (is_array($summonerName) && count($summonerName) > 1) {
 			$dbFile = '{strSingle}'.'_'.$region;
 			if(count($summonerName) > $this->API_LIMIT_SUMMONERS)
@@ -1178,8 +1177,8 @@ class riotapi {
 				{
 					$dbFile = base64_encode($summonerName).'_'.$region; 
 					$call .= strtolower(rawurlencode(implode(",",  $summonersChunked)));
-					$call = str_replace('{version}',$leagueVersion,self::API_URL_V3) . $call;
-					$return .= $this->request($call,$dbPath,$dbFile,$dbTime,$regionStr);
+					$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
+					$return .= $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 				}
 				return $return;
 			}
@@ -1187,16 +1186,16 @@ class riotapi {
 			{
 				$dbFile = base64_encode($summonerName).'_'.$region; 
 				$call .= strtolower(rawurlencode(implode(",", $summonerName)));
-				$call = str_replace('{version}',$leagueVersion,self::API_URL_V3) . $call;
-				return $this->request($call,$regionStr);
+				$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
+				return $this->request($call,$region);
 			}
 		}
 		else {
 			(is_array($summonerName)) ? $summonerName = implode(null,$summonerName):null;
 			$dbFile = base64_encode($summonerName).'_'.$region; 
 			$call .= strtolower(rawurlencode($summonerName));
-			$call = str_replace('{version}',$leagueVersion,self::API_URL_V3) . $call;
-			return $this->request($call,$dbPath,$dbFile,$dbTime,$regionStr);
+			$call = str_replace('{version}',$leagueVersion,self::API_URL) . $call;
+			return $this->request($call,$dbPath,$dbFile,$dbTime,$region);
 		}
 	}
 	
